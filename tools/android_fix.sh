@@ -603,3 +603,12 @@ if ! grep -q "coreLibraryDesugaring" "$GRADLE"; then
 fi
 grep -n "esugar" "$GRADLE"
 grep -q "esugar" "$GRADLE" || { echo "ERROR: core library desugaring not applied"; exit 1; }
+
+# --- App icon (Hanna Installment): branding/android/res -> generated project. ---
+# Naya icon banana ho to branding/ ki files badlein; yeh step khud copy kar dega.
+RES=android/app/src/main/res
+[ -d branding/android/res ] || { echo "ERROR: branding/android/res nahi mila"; exit 1; }
+cp -R branding/android/res/. "$RES/"
+grep -q 'android:icon="@mipmap/ic_launcher"' "$RES/../AndroidManifest.xml" || { echo "ERROR: manifest icon @mipmap/ic_launcher nahi"; exit 1; }
+ls -l "$RES/mipmap-anydpi-v26/" "$RES/mipmap-xxxhdpi/"
+echo "=== App icon lag gaya ==="
