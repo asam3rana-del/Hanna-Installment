@@ -24,6 +24,7 @@ import '../widgets/premium_header.dart';
 import '../widgets/role_guard.dart';
 import '../widgets/sync_section.dart';
 import '../sync/sync_repository.dart';
+import '../license/license_screen.dart';
 import 'about_screen.dart';
 import 'backup_export_screen.dart';
 import 'cash_screen.dart';
@@ -430,6 +431,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
     return [
       // Hanna Installment: Parties / Items / Reports / Sale / Purchase / Shell Ledger (grocery POS) hata diye.
+      row(Icons.verified_user_outlined, 'License', 'لائسنس', const LicenseScreen()),
       if (Permissions.can('expense'))
         row(Icons.business_center_outlined, 'Expense', 'اخراجات',
             const PermissionGuard(permission: 'expense', child: ExpenseScreen()), color: p.navyInk),

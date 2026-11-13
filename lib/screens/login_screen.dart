@@ -17,6 +17,7 @@ import '../services/staff_auth.dart';
 import '../utils/loc.dart';
 import '../utils/password_hasher.dart';
 import '../installment/installment_home_screen.dart';
+import '../license/license_screen.dart';
 import '../theme/theme_manager.dart';
 
 /// Mirrors LoginActivity.kt (password + "none" login method + pehli dafa admin setup).
@@ -114,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _goMain() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const InstallmentHomeScreen()));
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LicenseGate(child: InstallmentHomeScreen())));
   }
 
   /// Koi bhi exception aaye to `_busy` wapas false (pehle DB error par button hamesha disabled reh jata).

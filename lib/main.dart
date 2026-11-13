@@ -13,6 +13,7 @@ import 'db/desktop_db_init.dart';
 import 'installment/inst_due_alert.dart';
 import 'installment/inst_photo_sync.dart';
 import 'installment/installment_home_screen.dart';
+import 'license/license_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/app_lock.dart';
 import 'services/crash_handler.dart';
@@ -145,7 +146,8 @@ class AhDeveloperApp extends StatelessWidget {
             ),
           ),
           // Session hai to seedha dashboard, warna login/setup.
-          home: Session.isLoggedIn ? const InstallmentHomeScreen() : const LoginScreen(),
+          // License: pehle sahi key, phir login (license_screen.dart LicenseGate).
+          home: LicenseGate(child: Session.isLoggedIn ? const InstallmentHomeScreen() : const LoginScreen()),
         );
       },
     );

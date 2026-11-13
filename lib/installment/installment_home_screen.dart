@@ -18,6 +18,7 @@ import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
 import 'inst_repository.dart';
 import 'inst_shop_tools_screen.dart';
+import '../license/license_screen.dart';
 import '../services/bill_reminder_service.dart';
 import 'inst_ui.dart';
 
@@ -180,6 +181,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
             ),
           ],
         ),
+        const LicenseBanner(),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,

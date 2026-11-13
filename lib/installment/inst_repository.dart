@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:sqflite/sqflite.dart' show Sqflite;
 
 import '../db/app_database.dart';
+import '../license/license_service.dart';
 import '../services/session.dart';
 import '../db/party_repository.dart';
 import '../models/party.dart';
@@ -83,6 +84,7 @@ class InstRepository {
 
   /// Naya customer (POS `customers` row + profile). [ArgumentError] = galat input (message dikhayein).
   Future<int> addCustomer({required String name, required String phone, required CustomerProfile profile}) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     final n = name.trim();
     if (n.isEmpty) throw ArgumentError('Customer ka naam likhein.');
     _validateProfile(phone, profile);
@@ -95,6 +97,7 @@ class InstRepository {
   }
 
   Future<void> updateCustomer(Customer existing, {required String name, required String phone, required CustomerProfile profile}) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     final n = name.trim();
     if (n.isEmpty) throw ArgumentError('Customer ka naam likhein.');
     if (existing.id == null) throw ArgumentError('Customer nahi mila.');
@@ -151,6 +154,7 @@ class InstRepository {
 
   /// Naya / purana guarantor save. Wapas: id.
   Future<int> saveGuarantor(Guarantor g) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (g.name.trim().isEmpty) throw ArgumentError('Guarantor ka naam likhein.');
     if (!phoneValid(g.phone)) throw ArgumentError('Guarantor ka phone number theek nahi (03xx xxxxxxx).');
     if (!cnicValid(g.cnic)) throw ArgumentError('Guarantor ki CNIC ke poore 13 hindse likhein.');
@@ -223,6 +227,7 @@ class InstRepository {
   }
 
   Future<int> saveCategory(InstCategory c) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     final name = c.name.trim();
     if (name.isEmpty) throw ArgumentError('Category ka naam likhein.');
     final db = await AppDatabase.instance.database;
@@ -282,6 +287,7 @@ class InstRepository {
 
   /// Naya / purana piece save. Ek hi IMEI / serial do pieces par nahi (duplicate => [ArgumentError]).
   Future<int> saveItem(InstItem item) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (item.model.trim().isEmpty) throw ArgumentError('Model / naam likhein.');
     if (item.cashPrice < 0 || item.costPrice < 0) throw ArgumentError('Qeemat minus nahi ho sakti.');
     final db = await AppDatabase.instance.database;
@@ -353,6 +359,7 @@ class InstRepository {
   /// Sirf stock (in_stock) wale pieces; har tabdeeli ka record `inst_price_changes` mein. Wapas: kitne pieces badle.
   /// Pehle se bane qist plan NAHI badalte (un ki qeemat plan mein mehfooz hai).
   Future<int> changeRates({required Map<int, double> newCash, Map<int, double> newCost = const {}, String note = ''}) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager rate badal sakta hai.');
     final ids = {...newCash.keys, ...newCost.keys};
     if (ids.isEmpty) throw ArgumentError('Koi piece nahi chuna.');

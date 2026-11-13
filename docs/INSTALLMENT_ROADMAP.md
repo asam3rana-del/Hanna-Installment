@@ -111,5 +111,13 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
   `inst_price_changes` table (v40) + sync (`inst_price_change`, sirf admin/manager functions mein); item form par "Rate history";
   form se qeemat badlo to bhi record. Reports > Stock: naqd qeemat par maliyat, stock mein munafa, muddat ki rate tabdeeliyan
 
+## Step 10 — done: License (Trial / Annual) — tafseel docs/LICENSING.md
+- `lib/license/`: Ed25519 dastakhat wali offline keys (cryptography package, nayi dependency nahi), device code se bandhi,
+  tareekh peeche karne ki pakar, expiry par sirf dekhna + backup (writes band), Demo dukaan bina license,
+  LicenseGate (main + login ke baad), Home par patti, Settings > License. Test: test/license_test.dart (Python tool ke vectors)
+- Key banane ke tools: `tools/license_tool.py` (pure Python) aur `tools/license_generator.html` (phone, offline) —
+  Python / JS / Node crypto se bit-by-bit milaye gaye
+- build.yml: Android + Windows `--obfuscate --split-debug-info` (symbols artifact). `.gitignore`: *.key, licenses.csv
+
 ## Abhi baqi
 - Installment ka alag icon + feature graphic

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart' show DatabaseExecutor, Sqflite;
 
 import '../db/app_database.dart';
+import '../license/license_service.dart';
 import '../models/misc_entities.dart' show CashTransaction;
 import '../services/session.dart';
 import '../sync/device_tag.dart';
@@ -205,6 +206,7 @@ class InstPlanRepository {
     required int graceDays,
     String note = '',
   }) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     final q = quotePlan(
       cashPrice: cashPrice,
       advance: advance,
@@ -403,6 +405,7 @@ class InstPlanRepository {
   /// Qist wasool. [amount] qist mein jata hai, [fine] alag. Baqi se zyada => [ArgumentError].
   /// Poora adaa ho jaye to plan `completed`. Wapas: payment id.
   Future<int> receive(int planId, {required double amount, double fine = 0, String method = 'cash', String note = '', int? paidAt}) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (!amount.isFinite || amount < 0 || !fine.isFinite || fine < 0) throw ArgumentError('Raqam theek nahi.');
     if (amount <= 0 && fine <= 0) throw ArgumentError('Raqam likhein.');
     if (method != 'cash' && method != 'bank') throw ArgumentError('Cash ya Bank chunein.');
