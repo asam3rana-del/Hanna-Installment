@@ -163,12 +163,12 @@ class _LicenseScreenState extends State<LicenseScreen> {
                 if (st == LicenseStatus.clockBack)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(LicenseService.blockedMessage(st), style: TextStyle(color: p.red)),
+                    child: Text(LicenseService.blockedMessage(st!), style: TextStyle(color: p.red)),
                   ),
                 if (st == LicenseStatus.expired)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(LicenseService.blockedMessage(st), style: TextStyle(color: p.textMuted, fontSize: 12.5)),
+                    child: Text(LicenseService.blockedMessage(st!), style: TextStyle(color: p.textMuted, fontSize: 12.5)),
                   ),
               ]),
             ),
