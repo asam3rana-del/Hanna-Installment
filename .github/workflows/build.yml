@@ -133,6 +133,13 @@ jobs:
           grep -m3 "PRODUCT_BUNDLE_IDENTIFIER" ios/Runner.xcodeproj/project.pbxproj
           ! grep -q "PRODUCT_BUNDLE_IDENTIFIER = com.example" ios/Runner.xcodeproj/project.pbxproj || { echo "::error::iOS bundle id nahi badla"; exit 1; }
 
+      # App icon (Hanna Installment) — ek 1024px icon, Xcode baqi sizes khud banata hai.
+      - name: Set iOS app icon
+        run: |
+          rm -rf ios/Runner/Assets.xcassets/AppIcon.appiconset
+          cp -R branding/ios/AppIcon.appiconset ios/Runner/Assets.xcassets/
+          ls ios/Runner/Assets.xcassets/AppIcon.appiconset
+
       # iOS privacy strings: inke baghair camera (Bill Scan), gallery, contacts (party phone), Face ID
       # (fingerprint login) ya Bluetooth printer kholte hi iOS app ko foran band (crash) kar deta hai,
       # aur App Store review bhi reject karta hai.
@@ -318,6 +325,11 @@ jobs:
       - name: Set Windows window title
         shell: pwsh
         run: (Get-Content windows/runner/main.cpp) -replace 'L"hanna_installment"', 'L"Hanna Installment"' | Set-Content windows/runner/main.cpp
+
+      # App icon (Hanna Installment) — branding/windows/app_icon.ico.
+      - name: Set Windows app icon
+        shell: pwsh
+        run: Copy-Item -Force branding/windows/app_icon.ico windows/runner/resources/app_icon.ico
 
       - run: flutter build windows --release --obfuscate --split-debug-info=build/debug-info-windows
 
