@@ -2,6 +2,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../db/maintenance_sync.dart';
+import '../installment/inst_sync.dart' show applyInstallmentChanges;
 import 'sync_queue_dao.dart';
 import 'sync_queue_helper.dart';
 import 'sync_types.dart';
@@ -77,6 +78,8 @@ Future<void> applyRestOfServerChanges(
   // Due Reminders follow-ups: party (customers) upar apply ho chuki; na mile to partyId 0 rehti hai aur
   // `relinkOrphanedParties` baad mein jod deti hai.
   await applyDueFollowups(db, c.dueFollowups, nowMs: nowMs);
+  // Hanna Installment: customers / cash_transactions upar aa chuke (profile / payment unhi se judte hain).
+  await applyInstallmentChanges(db, c.installment, nowMs: nowMs);
 }
 
 // -------------------------------------------------------------------- sales

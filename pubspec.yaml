@@ -1,5 +1,5 @@
-name: ah_developer_kiryana_store
-description: "AH Developer Kiryana Store — cross-platform POS (Android + iPad/iOS), ported from the IBTISAAM Kiryana Store Kotlin app."
+name: hanna_installment
+description: "Hanna Installment — qist (installment) software for shops (Android + Windows + iOS), built on the Hanna POS codebase."
 publish_to: 'none'
 version: 1.0.0+1
 

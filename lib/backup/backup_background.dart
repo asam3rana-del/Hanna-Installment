@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:workmanager/workmanager.dart';
 
+import '../installment/inst_due_alert.dart';
 import '../services/bill_reminder_service.dart';
 import '../services/due_alert_service.dart';
 import '../services/return_alert_service.dart';
@@ -67,6 +68,8 @@ void backupCallbackDispatcher() {
       await DueAlertService.checkAndNotify();
       // Utility bills: ek din pehle / due din / guzarne ke baad reminder.
       await BillReminderService.checkAndNotify();
+      // Hanna Installment: aaj ki / late qiston ki subah wali notification.
+      await InstDueAlert.checkAndNotify();
       // Amanat / Loan: wapsi ki tarikh aa gayi ho to ek notification.
       await ReturnAlertService.checkAndNotify();
       return true;

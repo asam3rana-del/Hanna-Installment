@@ -32,6 +32,7 @@ import '../services/collection_actions.dart';
 import 'item_search_screen.dart';
 import 'items_screen.dart';
 import 'login_screen.dart';
+import '../installment/installment_home_screen.dart';
 import 'party_dashboard_screen.dart';
 import 'party_transaction_screen.dart';
 import 'purchase_screen.dart';
@@ -445,7 +446,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await DashboardRepository.instance.completeSwitch(user);
     if (!mounted) return;
     _toast(Loc.t('Switched to ${user.displayName}', '${user.displayName} پر سوئچ ہو گیا'));
-    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const DashboardScreen()), (_) => false);
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const InstallmentHomeScreen()), (_) => false);
   }
 
   // ---------------------------------------------------------------- actions
@@ -575,6 +576,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(children: [
         Row(children: [
+          // Hanna Installment: ye screen ab "Shop tools" se khulti hai — wapas Installment home par.
+          if (Navigator.of(context).canPop()) ...[
+            _circleButton(Icons.arrow_back, p.flatBlueBg, p.flatBlueFg, Loc.t('Back', 'واپس'),
+                () => Navigator.of(context).maybePop()),
+            const SizedBox(width: 10),
+          ],
           // Products & Reports Kotlin mein Settings ke andar hain — gear yahin le jata hai.
           _circleButton(Icons.settings_outlined, p.flatPurpleBg, p.flatPurpleFg, Loc.t('Settings', 'سیٹنگز'),
               () => _push(const SettingsScreen())),

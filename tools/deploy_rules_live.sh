@@ -1,11 +1,14 @@
 #!/data/data/com.termux/files/usr/bin/env bash
-# Hanna POS: LIVE Firestore rules — device roles (cashier server par roka jata hai).
+# Hanna Installment: LIVE Firestore rules — device roles (cashier server par roka jata hai).
 #   bash /sdcard/Download/deploy_rules_live.sh            -> device-roles rules publish
 #   bash /sdcard/Download/deploy_rules_live.sh rollback   -> purani (sirf branch) rules wapas
 # Role na likha ho = admin (aaj jaisa). Sirf branch_members/{uid}.role = "cashier" wale devices par pabandi.
 set -e
 MODE="${1:-roles}"
-PROJECT="${2:-my-grocery-pos-8a444}"
+PROJECT="${2:-}"
+# Hanna Installment: project ka naam LAZMI (POS ka live project my-grocery-pos-8a444 galti se na badle).
+[ -n "$PROJECT" ] || { echo "Usage: bash deploy_rules_live.sh roles <installment-firebase-project-id>"; exit 1; }
+[ "$PROJECT" != "my-grocery-pos-8a444" ] || { echo "Ye Hanna POS ka project hai — Installment ka naya project dein"; exit 1; }
 command -v firebase >/dev/null 2>&1 || { echo "firebase CLI nahi mila"; exit 1; }
 WORK="$HOME/ah_rules_deploy"
 rm -rf "$WORK" && mkdir -p "$WORK" && cd "$WORK"
@@ -89,7 +92,9 @@ service cloud.firestore {
                              'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
                              'workers', 'worker_attendance', 'worker_advances',
                              'worker_salary_payments', 'shop_rents', 'shop_rent_ledger',
-                             'utility_bills', 'utility_bill_payments'];
+                             'utility_bills', 'utility_bill_payments',
+                             // Hanna Installment
+                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos'];
     }
 
     // Server-side record of which branch each staff UID belongs to.
@@ -222,12 +227,14 @@ service cloud.firestore {
     function cashierReadable(collection) {
       return collection in ['customers', 'products', 'sales', 'payments', 'expenses', 'cash_transactions',
                             'cash_register', 'units', 'categories', 'returns', 'stock_movements',
-                            'app_settings', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log'];
+                            'app_settings', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
+                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos'];
     }
     function cashierMayCreate(collection) {
       return notTombstone() && collection in ['customers', 'sales', 'payments', 'expenses', 'cash_transactions',
                             'cash_register', 'returns', 'stock_movements', 'shell_customers',
-                            'shell_transactions', 'shop_empty_shell_log'];
+                            'shell_transactions', 'shop_empty_shell_log',
+                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos'];
     }
     function cashierMayUpdate(collection) {
       return notTombstone() && (
@@ -236,7 +243,8 @@ service cloud.firestore {
         || (collection == 'customers'
           && !changedKeys().hasAny(['creditLimit', 'openingBalance', 'stuckBalance', '_deleted']))
         || collection in ['sales', 'payments', 'expenses', 'cash_transactions', 'cash_register', 'returns',
-                          'stock_movements', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log']);
+                          'stock_movements', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
+                          'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos']);
     }
 
     // Reads of a document that does not exist yet (resource == null) must not error out:
@@ -276,7 +284,9 @@ service cloud.firestore {
                              'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
                              'workers', 'worker_attendance', 'worker_advances',
                              'worker_salary_payments', 'shop_rents', 'shop_rent_ledger',
-                             'utility_bills', 'utility_bill_payments'];
+                             'utility_bills', 'utility_bill_payments',
+                             // Hanna Installment
+                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos'];
     }
 
     // Server-side record of which branch each staff UID belongs to.

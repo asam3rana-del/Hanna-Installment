@@ -19,7 +19,8 @@ service cloud.firestore {
           'zakat_years','zakat_payments','returns','stock_movements','app_settings',
           'shell_customers','shell_transactions','shop_empty_shell_log','workers',
           'worker_attendance','worker_advances','worker_salary_payments','shop_rents',
-          'shop_rent_ledger','utility_bills','utility_bill_payments','due_followups'];
+          'shop_rent_ledger','utility_bills','utility_bill_payments','due_followups',
+          'inst_customer_profiles','inst_guarantors','inst_categories','inst_items','inst_plans','inst_payments','inst_photos'];
       }
       allow read: if synced() && ownBranch(resource.data.branchId);
       // Cashier direct writes intentionally denied until the POS operation is server-side.

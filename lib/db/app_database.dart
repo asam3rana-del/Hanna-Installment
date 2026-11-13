@@ -1,6 +1,9 @@
+import 'dart:convert' show jsonEncode;
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../installment/inst_models.dart' show defaultInstCategories;
 import '../models/return_entry.dart';
 import '../services/demo_mode.dart';
 
@@ -19,8 +22,8 @@ class AppDatabase {
   AppDatabase._();
   static final AppDatabase instance = AppDatabase._();
 
-  static const _dbName = 'ah_developer_kiryana_store.db';
-  static const _dbVersion = 37;
+  static const _dbName = 'hanna_installment.db';
+  static const _dbVersion = 39;
 
   Database? _db;
 
@@ -352,8 +355,12 @@ class AppDatabase {
       )
     ''');
 
-    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql]) {
+    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql]) {
       batch.execute(sql);
+    }
+    final seedAt = DateTime.now().millisecondsSinceEpoch;
+    for (final row in _defaultInstCategoryRows(seedAt)) {
+      batch.insert('inst_categories', row);
     }
 
     // Seed defaults — mirrors the Kotlin app's first-run defaults.
@@ -583,6 +590,25 @@ class AppDatabase {
       // aur qist plan (models/qist_plan.dart, JSON).
       await _addColumnIfMissing(db, 'customers', 'paySchedule', "TEXT NOT NULL DEFAULT ''");
       await _addColumnIfMissing(db, 'customers', 'qistPlan', "TEXT NOT NULL DEFAULT ''");
+    }
+    if (oldVersion < 38) {
+      // v38: Hanna Installment — customer_profiles (CNIC, walid, pata), inst_guarantors (zamin),
+      // inst_categories (Mobile / Bike / LCD... + pehchan fields), inst_items (har piece, IMEI / engine no.).
+      for (final sql in installmentTablesSql) {
+        await db.execute(sql);
+      }
+      final have = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inst_categories')) ?? 0;
+      if (have == 0) {
+        for (final row in _defaultInstCategoryRows(DateTime.now().millisecondsSinceEpoch)) {
+          await db.insert('inst_categories', row);
+        }
+      }
+    }
+    if (oldVersion < 39) {
+      // v39: Hanna Installment Step 3 — qist plan, us ka schedule (har qist ki tareekh / raqam), aur wasooli.
+      for (final sql in installmentPlanTablesSql) {
+        await db.execute(sql);
+      }
     }
     // products.searchTag was added to _onCreate WITHOUT a migration step, so a database created by the
     // earliest builds (schema v1) never got the column. Found by the real-file migration test
@@ -892,6 +918,153 @@ class AppDatabase {
       )
     ''',
   ];
+
+  /// Hanna Installment (v38). Abhi sirf is device par (sync agle step mein, `serverId` / `updatedAt` pehle se rakhe hain).
+  /// `customer_profiles.customerId` = POS ki `customers.id` (customer ka ledger / payments wahi rehta hai).
+  static const installmentTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS customer_profiles (
+        customerId INTEGER PRIMARY KEY NOT NULL,
+        fatherName TEXT NOT NULL DEFAULT '',
+        cnic TEXT NOT NULL DEFAULT '',
+        phone2 TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        occupation TEXT NOT NULL DEFAULT '',
+        workAddress TEXT NOT NULL DEFAULT '',
+        monthlyIncome REAL NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_customer_profiles_cnic ON customer_profiles (cnic)',
+    '''
+      CREATE TABLE IF NOT EXISTS inst_guarantors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customerId INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        fatherName TEXT NOT NULL DEFAULT '',
+        cnic TEXT NOT NULL DEFAULT '',
+        phone TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        relation TEXT NOT NULL DEFAULT '',
+        occupation TEXT NOT NULL DEFAULT '',
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_guarantors_customer ON inst_guarantors (customerId)',
+    '''
+      CREATE TABLE IF NOT EXISTS inst_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        idFields TEXT NOT NULL DEFAULT '[]',
+        sortOrder INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS inst_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        categoryId INTEGER NOT NULL,
+        brand TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '',
+        idValues TEXT NOT NULL DEFAULT '{}',
+        costPrice REAL NOT NULL DEFAULT 0,
+        cashPrice REAL NOT NULL DEFAULT 0,
+        warrantyMonths INTEGER NOT NULL DEFAULT 0,
+        supplier TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'in_stock',
+        purchaseDate INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_items_category ON inst_items (categoryId, status)',
+  ];
+
+  /// v39: qist plan. `inst_plans.itemId` = `inst_items.id` (plan banne par item `sold`). `guarantorIds` = JSON [id].
+  /// `inst_schedule` = har qist (seq 1..n). `inst_payments.kind` = advance | installment; `fine` = late fine
+  /// (qist ke hisaab mein nahi ginta). `cashTxId` = saath bani `cash_transactions` row (aaj ke cash mein).
+  static const installmentPlanTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS inst_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        planNo TEXT NOT NULL DEFAULT '',
+        customerId INTEGER NOT NULL,
+        itemId INTEGER NOT NULL,
+        guarantorIds TEXT NOT NULL DEFAULT '[]',
+        cashPrice REAL NOT NULL DEFAULT 0,
+        costPrice REAL NOT NULL DEFAULT 0,
+        advance REAL NOT NULL DEFAULT 0,
+        profitMode TEXT NOT NULL DEFAULT 'percent',
+        profitValue REAL NOT NULL DEFAULT 0,
+        profit REAL NOT NULL DEFAULT 0,
+        totalPrice REAL NOT NULL DEFAULT 0,
+        installmentTotal REAL NOT NULL DEFAULT 0,
+        count INTEGER NOT NULL DEFAULT 1,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        firstDueDate INTEGER NOT NULL DEFAULT 0,
+        roundTo INTEGER NOT NULL DEFAULT 1,
+        lateFee REAL NOT NULL DEFAULT 0,
+        graceDays INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        note TEXT NOT NULL DEFAULT '',
+        createdBy TEXT NOT NULL DEFAULT '',
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        closedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_plans_customer ON inst_plans (customerId, status)',
+    '''
+      CREATE TABLE IF NOT EXISTS inst_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        planId INTEGER NOT NULL,
+        seq INTEGER NOT NULL,
+        dueDate INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        serverId TEXT,
+        UNIQUE (planId, seq)
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS inst_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        planId INTEGER NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'installment',
+        amount REAL NOT NULL DEFAULT 0,
+        fine REAL NOT NULL DEFAULT 0,
+        method TEXT NOT NULL DEFAULT 'cash',
+        note TEXT NOT NULL DEFAULT '',
+        cashTxId INTEGER,
+        receivedBy TEXT NOT NULL DEFAULT '',
+        paidAt INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_payments_plan ON inst_payments (planId, paidAt)',
+  ];
+
+  static List<Map<String, Object?>> _defaultInstCategoryRows(int now) => [
+        for (var i = 0; i < defaultInstCategories.length; i++)
+          {
+            'name': defaultInstCategories[i].$1,
+            'idFields': jsonEncode(defaultInstCategories[i].$2),
+            'sortOrder': i,
+            'createdAt': now,
+            'updatedAt': now,
+          }
+      ];
 
   /// Safe ALTER TABLE: skips if the column already exists (e.g. a device that
   /// got the column from an earlier test build), so upgrade never crashes.

@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../backup/offsite_backup.dart';
 import '../db/collection_autopilot_repository.dart';
 import '../db/due_followup_repository.dart';
+import '../installment/inst_collection_screens.dart';
+import '../installment/inst_due_alert.dart';
 import '../models/collection_autopilot.dart';
 import '../screens/collection_hub_screen.dart';
 import '../screens/amanat_loan_screen.dart';
@@ -70,6 +72,13 @@ class DueAlertService {
     // Roz ka "backup bahar bhejein" reminder: seedha sab se naye backup ki share sheet.
     if (payload == OffsiteBackup.payload) {
       WidgetsBinding.instance.addPostFrameCallback((_) => OffsiteBackup.shareLatest());
+      return;
+    }
+    // Hanna Installment: roz ki qist notification -> Wasooli List.
+    if (payload == InstDueAlert.payload) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        AppLock.navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const InstCollectionListScreen()));
+      });
       return;
     }
     if (payload != _payload && payload != queuePayload && payload != billsPayload && payload != returnPayload) return;

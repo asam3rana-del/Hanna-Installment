@@ -6,7 +6,7 @@
 TARGET_SDK=36
 # Play Store App ID (2026-11-10 faisla). Kabhi na badlein — badalne se nayi app ban jati hai.
 # `namespace` (Kotlin/Java code ka package) jaan boojh kar wahi rehta hai; sirf applicationId badalta hai.
-APP_ID="${APP_ID:-com.hannasolutions.pos}"
+APP_ID="${APP_ID:-com.hannasolutions.installment}"
 MIN_SDK=23   # flutter_secure_storage (backup password); Flutter ka apna minimum is se zyada ho to wahi rehta hai
 
 GRADLE=android/app/build.gradle
@@ -48,17 +48,22 @@ echo "android.suppressUnsupportedCompileSdk=$TARGET_SDK" >> android/gradle.prope
 # yeh nahi hoti; sirf tab jodo jab pehle se na hon.
 MANIFEST=android/app/src/main/AndroidManifest.xml
 
-# App ka naam (phone par icon ke neeche): Hanna POS.
-sed -i -E 's/android:label="[^"]*"/android:label="Hanna POS"/' "$MANIFEST"
-grep -q 'android:label="Hanna POS"' "$MANIFEST" || { echo "ERROR: app label not set"; exit 1; }
+# App ka naam (phone par icon ke neeche): Hanna Installment.
+sed -i -E 's/android:label="[^"]*"/android:label="Hanna Installment"/' "$MANIFEST"
+grep -q 'android:label="Hanna Installment"' "$MANIFEST" || { echo "ERROR: app label not set"; exit 1; }
 if ! grep -q "BLUETOOTH_CONNECT" "$MANIFEST"; then
   sed -i '0,/<manifest[^>]*>/s//&\n    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" \/>\n    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" \/>\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" \/>\n    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" \/>\n    <uses-permission android:name="android.permission.CAMERA" \/>/' "$MANIFEST"
 fi
 
-# Phase 6 (Parties): contact picker (flutter_contacts) — READ_CONTACTS, sirf tab jodo jab pehle se na ho.
-if ! grep -q "READ_CONTACTS" "$MANIFEST"; then
-  sed -i '0,/<manifest[^>]*>/s//&\n    <uses-permission android:name="android.permission.READ_CONTACTS" \/>/' "$MANIFEST"
+# Hanna Installment: READ_CONTACTS NAHI. Pakistan mein Google Play contacts ki ijazat ko loan apps se jorta hai
+# (unhein contacts / photos ki ijazat mana hai); qist app mein contact picker ki zaroorat bhi nahi (POS ki party screen
+# chhupi hai). flutter_contacts ka system picker ijazat ke baghair number na de to user number khud likhta hai.
+# Plugin ka apna manifest ijazat jore to bhi merged manifest se hat jaye: tools:node="remove".
+grep -q 'xmlns:tools=' "$MANIFEST" || sed -i '0,/<manifest /s//<manifest xmlns:tools="http:\/\/schemas.android.com\/tools" /' "$MANIFEST"
+if ! grep -q 'READ_CONTACTS" tools:node="remove"' "$MANIFEST"; then
+  sed -i '0,/<manifest[^>]*>/s//&\n    <uses-permission android:name="android.permission.READ_CONTACTS" tools:node="remove" \/>/' "$MANIFEST"
 fi
+grep -q 'READ_CONTACTS" tools:node="remove"' "$MANIFEST" || { echo "ERROR: READ_CONTACTS remove not written"; exit 1; }
 grep -n "uses-permission" "$MANIFEST"
 
 # --- R8 rules: google_mlkit_text_recognition refers to Chinese/Japanese/Korean/Devanagari option classes

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:ah_developer_kiryana_store/db/app_database.dart';
+import 'package:hanna_installment/db/app_database.dart';
 
 /// Database migration tests, part 2 (improvement plan, P0 #4): start versions BELOW v20.
 ///
@@ -41,6 +41,8 @@ void main() {
 
   // version -> what that migration step added (removed when rewinding to a version below it)
   final steps = <_Step>[
+    _Step(39, tables: ['inst_payments', 'inst_schedule', 'inst_plans']),
+    _Step(38, tables: ['inst_items', 'inst_categories', 'inst_guarantors', 'customer_profiles']),
     _Step(37, columns: {'customers': ['paySchedule', 'qistPlan']}),
     _Step(36, columns: {'due_followups': ['serverId', 'partyServerId']}),
     _Step(35, tables: ['due_followups']),
