@@ -13,7 +13,8 @@ import 'package:hanna_installment/sync/sync_queue_helper.dart';
 
 /// Device A par qist ka data -> sync_queue payloads -> (cloud documents) -> device B par apply.
 Future<Database> _device() async {
-  final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+  // singleInstance: false — warna dono ":memory:" ek hi database ban jate hain (device A = device B).
+  final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath, options: OpenDatabaseOptions(singleInstance: false));
   await db.execute('''CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
     phone TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '', serverId TEXT, updatedAt INTEGER NOT NULL DEFAULT 0)''');
   await db.execute('''CREATE TABLE cash_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL,
