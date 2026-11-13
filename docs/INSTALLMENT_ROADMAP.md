@@ -101,5 +101,15 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
 - `import-zip.yml`: zip mein `.import-delete.txt` ho to us ki files repo se mitata hai (rsync khud nahi mitata).
   Workflow file bot update nahi kar sakta — user ne haath se paste ki
 
+## Step 9 — done (DB v40)
+- Munafa (Reports, admin/manager): har wasooli mein munafe ka hissa = raqam × (qist qeemat − khareed) ÷ qist qeemat
+  ("installment method"; gol aakhir mein) + late fine − kharche (expenses table: salary / kiraya / bills samet, category wise)
+  = khalis munafa. Khareed na likhi ho to us wasooli ka munafa nahi ginta (alag batata hai). Plan screen: munafa ab tak / kul.
+  `profitShare` / `profitReport` PURE (test/installment_reports_test.dart)
+- Rate badlein (Stock screen ka 💲 button, admin/manager): category + search se pieces, ±% / ±Rs / naya rate, gol karna,
+  "khareed bhi badlein" (default band), preview + stock maliyat ka farq. Sirf in_stock; bane plan nahi badalte.
+  `inst_price_changes` table (v40) + sync (`inst_price_change`, sirf admin/manager functions mein); item form par "Rate history";
+  form se qeemat badlo to bhi record. Reports > Stock: naqd qeemat par maliyat, stock mein munafa, muddat ki rate tabdeeliyan
+
 ## Abhi baqi
 - Installment ka alag icon + feature graphic

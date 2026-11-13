@@ -224,6 +224,23 @@ class InstSync {
     }));
   }
 
+  static Future<void> enqueuePriceChange(DatabaseExecutor ex, int id) async {
+    final r = await _row(ex, 'inst_price_changes', 'id', id);
+    if (r == null) return;
+    final isid = await itemServerId(ex, _i(r['itemId']));
+    if (isid == null) return;
+    final eid = _own('inst_price_change:', r);
+    await _stampServerId(ex, 'inst_price_changes', 'id', id, eid);
+    await SyncQueueHelper.enqueue(ex, instPriceChangeType, eid, 'upsert', _stamp({
+      'serverId': eid,
+      'itemServerId': isid,
+      for (final k in const ['oldCash', 'newCash', 'oldCost', 'newCost']) k: _d(r[k]),
+      'note': _s(r['note']),
+      'changedBy': _s(r['changedBy']),
+      'changedAt': _i(r['changedAt']),
+    }));
+  }
+
   /// Delete se PEHLE bulayein (row se serverId chahiye). serverId na ho (kabhi push hi nahi hua) to kuch nahi.
   static Future<void> enqueueDeleteRow(DatabaseExecutor ex, String type, String table, String keyCol, Object key) async {
     final r = await _row(ex, table, keyCol, key);
@@ -252,6 +269,11 @@ class InstSync {
     }
     for (final r in await ex.query('inst_payments', columns: ['id'])) {
       await enqueuePayment(ex, _i(r['id']));
+    }
+    if ((await ex.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_price_changes'")).isNotEmpty) {
+      for (final r in await ex.query('inst_price_changes', columns: ['id'])) {
+        await enqueuePriceChange(ex, _i(r['id']));
+      }
     }
   }
 }
@@ -471,6 +493,35 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       await db.update('inst_payments', values, where: 'id = ?', whereArgs: [localId]);
     }
   }
+  // ---- rate tabdeeli ka record (sirf tareekh; item ki nayi qeemat item doc se aati hai)
+  final priceDocs = of('inst_price_changes');
+  if (priceDocs.isNotEmpty &&
+      (await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_price_changes'")).isNotEmpty) {
+    for (final d in priceDocs) {
+      final sid = _sn(d['serverId']);
+      if (sid == null || await pending(instPriceChangeType, sid)) continue;
+      final localId = await _localIdBySid(db, 'inst_price_changes', sid);
+      if (d['_deleted'] == true) {
+        if (localId != null) await db.delete('inst_price_changes', where: 'id = ?', whereArgs: [localId]);
+        continue;
+      }
+      final iid = await _localIdBySid(db, 'inst_items', _s(d['itemServerId']));
+      if (iid == null) continue;
+      final values = <String, Object?>{
+        'itemId': iid,
+        for (final k in const ['oldCash', 'newCash', 'oldCost', 'newCost']) k: _d(d[k]),
+        'note': _s(d['note']),
+        'changedBy': _s(d['changedBy']),
+        'changedAt': _i(d['changedAt']),
+      };
+      if (localId == null) {
+        await db.insert('inst_price_changes', {...values, 'serverId': sid});
+      } else {
+        await db.update('inst_price_changes', values, where: 'id = ?', whereArgs: [localId]);
+      }
+    }
+  }
+
   // ---- tasveerein (files; customers / guarantors upar aa chuke)
   await applyInstallmentPhotos(db, of('inst_photos'));
   InstSync.onApplied?.call();

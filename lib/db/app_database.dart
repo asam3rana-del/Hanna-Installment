@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 39;
+  static const _dbVersion = 40;
 
   Database? _db;
 
@@ -355,7 +355,7 @@ class AppDatabase {
       )
     ''');
 
-    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql]) {
+    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql]) {
       batch.execute(sql);
     }
     final seedAt = DateTime.now().millisecondsSinceEpoch;
@@ -607,6 +607,12 @@ class AppDatabase {
     if (oldVersion < 39) {
       // v39: Hanna Installment Step 3 — qist plan, us ka schedule (har qist ki tareekh / raqam), aur wasooli.
       for (final sql in installmentPlanTablesSql) {
+        await db.execute(sql);
+      }
+    }
+    if (oldVersion < 40) {
+      // v40: Hanna Installment Step 9 — stock ke rate ki tabdeeli ka record (purana -> naya, kis ne, kab).
+      for (final sql in installmentPriceTablesSql) {
         await db.execute(sql);
       }
     }
@@ -1053,6 +1059,25 @@ class AppDatabase {
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_payments_plan ON inst_payments (planId, paidAt)',
+  ];
+
+  /// v40: rate tabdeeli. `itemId` = inst_items.id. Cash (naqd bechne ki) qeemat hamesha; cost sirf jab badli ho.
+  static const installmentPriceTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS inst_price_changes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        itemId INTEGER NOT NULL,
+        oldCash REAL NOT NULL DEFAULT 0,
+        newCash REAL NOT NULL DEFAULT 0,
+        oldCost REAL NOT NULL DEFAULT 0,
+        newCost REAL NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        changedBy TEXT NOT NULL DEFAULT '',
+        changedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_price_changes_item ON inst_price_changes (itemId, changedAt)',
   ];
 
   static List<Map<String, Object?>> _defaultInstCategoryRows(int now) => [

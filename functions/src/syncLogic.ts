@@ -25,6 +25,7 @@ export const SYNC_COLLECTIONS: Record<string, string> = {
   // Hanna Installment (lib/installment/inst_sync_names.dart)
   inst_profile: "inst_customer_profiles", inst_guarantor: "inst_guarantors", inst_category: "inst_categories",
   inst_item: "inst_items", inst_plan: "inst_plans", inst_payment: "inst_payments", inst_photo: "inst_photos",
+  inst_price_change: "inst_price_changes", // sirf admin / manager (cashier list mein nahi)
 };
 
 export const OPERATIONS = ["upsert", "delete", "create_if_absent", "increment_stock", "increment_balance", "set_stock"];

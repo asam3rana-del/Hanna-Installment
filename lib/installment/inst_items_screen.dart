@@ -8,6 +8,7 @@ import '../utils/loc.dart';
 import 'inst_models.dart';
 import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
+import 'inst_rate_screen.dart';
 import 'inst_repository.dart';
 import 'inst_ui.dart';
 
@@ -94,6 +95,15 @@ class _InstItemsScreenState extends State<InstItemsScreen> {
       body: Column(children: [
         instHeader(context, p, Loc.t('Stock', 'اسٹاک'), Loc.t('Every piece with its IMEI / serial', 'ہر پیس اپنے IMEI / سیریل کے ساتھ'),
             actions: [
+              if (Session.isAdminOrManager)
+                IconButton(
+                  tooltip: Loc.t('Change rates', 'ریٹ بدلیں'),
+                  icon: const Icon(Icons.price_change_outlined, color: Colors.white),
+                  onPressed: () async {
+                    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InstRateChangeScreen()));
+                    await _reload();
+                  },
+                ),
               IconButton(
                 tooltip: Loc.t('Categories', 'کیٹیگریز'),
                 icon: const Icon(Icons.category_outlined, color: Colors.white),
@@ -237,6 +247,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
 
   /// Field ka naam -> controller. Category badalne par naye fields; purani bhari value na mitti (wapas aane par mile).
   final Map<String, TextEditingController> _ids = {};
+  List<PriceChange> _history = const [];
   bool _saving = false;
 
   static String _num(double? v) => v == null || v == 0 ? '' : instPlain(v);
@@ -258,6 +269,12 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
     if (!widget.categories.any((c) => c.id == _catId)) _catId = widget.categories.first.id!;
     for (final e in (widget.existing?.idValues ?? const <String, String>{}).entries) {
       _ids[e.key] = TextEditingController(text: e.value);
+    }
+    final id = widget.existing?.id;
+    if (id != null) {
+      InstRepository.instance.priceHistory(id).then((h) {
+        if (mounted) setState(() => _history = h);
+      }).catchError((_) {});
     }
   }
 
@@ -465,6 +482,37 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
             ),
             gap(),
             TextField(controller: _note, maxLines: 2, decoration: instDeco(p, Loc.t('Note', 'نوٹ'))),
+            if (_history.isNotEmpty) ...[
+              instSectionTitle(p, Loc.t('RATE HISTORY', 'ریٹ کی تاریخ')),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: instCard(p),
+                child: Column(children: [
+                  for (final h in _history)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        SizedBox(
+                          width: 92,
+                          child: Text(DateFormat('dd MMM yy').format(DateTime.fromMillisecondsSinceEpoch(h.changedAt)),
+                              style: TextStyle(color: p.textMuted, fontSize: 12)),
+                        ),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('${instRs(h.oldCash)} → ${instRs(h.newCash)}',
+                                style: TextStyle(color: h.newCash >= h.oldCash ? p.teal : p.red, fontWeight: FontWeight.w600)),
+                            if (h.costChanged && Session.isAdminOrManager)
+                              Text('${Loc.t('Cost', 'لاگت')} ${instRs(h.oldCost)} → ${instRs(h.newCost)}',
+                                  style: TextStyle(color: p.textMuted, fontSize: 12)),
+                            if (h.note.isNotEmpty || h.changedBy.isNotEmpty)
+                              Text([h.note, h.changedBy].where((x) => x.isNotEmpty).join(' • '), style: TextStyle(color: p.textMuted, fontSize: 11.5)),
+                          ]),
+                        ),
+                      ]),
+                    ),
+                ]),
+              ),
+            ],
             const SizedBox(height: 20),
             instPrimaryButton(p, _saving ? Loc.t('Saving...', 'محفوظ ہو رہا ہے...') : Loc.t('Save', 'محفوظ کریں'), _saving ? null : _save),
           ]),

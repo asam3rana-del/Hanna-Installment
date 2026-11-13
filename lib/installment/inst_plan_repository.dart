@@ -539,6 +539,30 @@ class InstPlanRepository {
     return periodReport(payments: pays, plans: plans, closures: closures, from: from, to: to);
   }
 
+  /// Munafa (Step 9): muddat ki wasooli ka munafe wala hissa + fine − kharche (expenses table: salary / kiraya / bills samet).
+  Future<ProfitReport> profit({required int from, required int to}) async {
+    final db = await AppDatabase.instance.database;
+    final pays = [
+      for (final r in await db.rawQuery('''
+        SELECT p.paidAt AS paidAt, p.amount AS amount, p.fine AS fine, pl.totalPrice AS totalPrice, pl.costPrice AS costPrice
+        FROM inst_payments p JOIN inst_plans pl ON pl.id = p.planId
+        WHERE p.paidAt >= ? AND p.paidAt < ?
+      ''', [from, to]))
+        ProfitPayRow(
+          paidAt: (r['paidAt'] as num).toInt(),
+          amount: ((r['amount'] as num?) ?? 0).toDouble(),
+          fine: ((r['fine'] as num?) ?? 0).toDouble(),
+          totalPrice: ((r['totalPrice'] as num?) ?? 0).toDouble(),
+          costPrice: ((r['costPrice'] as num?) ?? 0).toDouble(),
+        )
+    ];
+    final ex = [
+      for (final r in await db.rawQuery('SELECT createdAt, category, amount FROM expenses WHERE createdAt >= ? AND createdAt < ?', [from, to]))
+        ((r['createdAt'] as num).toInt(), (r['category'] as String?) ?? '', ((r['amount'] as num?) ?? 0).toDouble())
+    ];
+    return profitReport(payments: pays, expenses: ex, from: from, to: to);
+  }
+
   // ================================================================ home
 
   Future<InstCollectionStats> collectionStats({int? today}) async {

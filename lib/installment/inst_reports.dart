@@ -192,3 +192,106 @@ double dueWithin(PlanStatus s, int today, int days) {
   }
   return _r2(math.max(0, v));
 }
+
+// ================================================================== Step 9: munafa
+
+/// Qist ki har wasooli mein munafe ka hissa (proportional / "installment method"):
+///   hissa = wasooli × (qist qeemat − khareed) ÷ qist qeemat
+/// Khareed (cost) 0 likhi ho to munafa maloom nahi — null. Qist qeemat cost se kam ho to hissa minus (nuqsan).
+double? profitShare({required double collected, required double totalPrice, required double costPrice}) {
+  if (costPrice <= 0 || totalPrice <= 0) return null;
+  return _r2(collected * (totalPrice - costPrice) / totalPrice);
+}
+
+/// Report ke liye ek wasooli + us ke plan ki qeemat (DB join ka saada roop).
+class ProfitPayRow {
+  final int paidAt;
+  final double amount; // qist / advance (fine ke baghair)
+  final double fine;
+  final double totalPrice;
+  final double costPrice;
+  const ProfitPayRow({required this.paidAt, required this.amount, this.fine = 0, required this.totalPrice, required this.costPrice});
+}
+
+class ProfitReport {
+  /// Wasooli (fine ke baghair) jis ka munafa nikla.
+  final double collectedWithCost;
+
+  /// Wasooli jin plans ki khareed likhi nahi (munafa maloom nahi).
+  final double collectedWithoutCost;
+  final double realizedProfit;
+  final double fines;
+
+  /// Kharche: category -> raqam.
+  final Map<String, double> expenses;
+  const ProfitReport({
+    required this.collectedWithCost,
+    required this.collectedWithoutCost,
+    required this.realizedProfit,
+    required this.fines,
+    required this.expenses,
+  });
+
+  double get expenseTotal => _r2(expenses.values.fold<double>(0, (a, b) => a + b));
+  double get grossProfit => _r2(realizedProfit + fines);
+  double get netProfit => _r2(grossProfit - expenseTotal);
+}
+
+/// [from] shamil, [to] nahi. [expenses] = (createdAt, category, amount).
+ProfitReport profitReport({
+  required List<ProfitPayRow> payments,
+  required List<(int, String, double)> expenses,
+  required int from,
+  required int to,
+}) {
+  double withCost = 0, without = 0, profit = 0, fines = 0;
+  for (final p in payments) {
+    if (p.paidAt < from || p.paidAt >= to) continue;
+    fines += p.fine;
+    if (p.costPrice <= 0 || p.totalPrice <= 0) {
+      without += p.amount;
+    } else {
+      withCost += p.amount;
+      profit += p.amount * (p.totalPrice - p.costPrice) / p.totalPrice; // gol aakhir mein (har line par nahi)
+    }
+  }
+  final ex = <String, double>{};
+  for (final (at, cat, amt) in expenses) {
+    if (at < from || at >= to) continue;
+    final k = cat.trim().isEmpty ? 'Other' : cat.trim();
+    ex[k] = _r2((ex[k] ?? 0) + amt);
+  }
+  return ProfitReport(
+    collectedWithCost: _r2(withCost),
+    collectedWithoutCost: _r2(without),
+    realizedProfit: _r2(profit),
+    fines: _r2(fines),
+    expenses: ex,
+  );
+}
+
+// ================================================================== Step 9: rate badalna
+
+enum RateChangeMode { setTo, addAmount, percent }
+
+/// Naya rate: [setTo] = seedha yeh raqam; [addAmount] = +/− Rs; [percent] = +/− %. [roundTo] tak gol (1 = nahi).
+/// Kabhi 0 se kam nahi.
+double applyRateChange(double old, RateChangeMode mode, double value, {int roundTo = 1}) {
+  final double raw = switch (mode) {
+    RateChangeMode.setTo => value,
+    RateChangeMode.addAmount => old + value,
+    RateChangeMode.percent => old * (1 + value / 100),
+  };
+  final step = roundTo < 1 ? 1 : roundTo;
+  final r = (raw / step).roundToDouble() * step;
+  return r < 0 ? 0 : _r2(r);
+}
+
+/// Stock ki maliyat: (pieces, kul khareed, kul naqd qeemat). Naqd − khareed = mutawaqqa munafa.
+class StockValue {
+  final int pieces;
+  final double cost;
+  final double cash;
+  const StockValue(this.pieces, this.cost, this.cash);
+  double get margin => _r2(cash - cost);
+}

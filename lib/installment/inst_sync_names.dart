@@ -7,6 +7,7 @@ const instItemType = 'inst_item';
 const instPlanType = 'inst_plan';
 const instPaymentType = 'inst_payment';
 const instPhotoType = 'inst_photo';
+const instPriceChangeType = 'inst_price_change';
 
 /// entityType -> Firestore collection.
 const Map<String, String> instPushCollections = {
@@ -17,6 +18,7 @@ const Map<String, String> instPushCollections = {
   instPlanType: 'inst_plans',
   instPaymentType: 'inst_payments',
   instPhotoType: 'inst_photos',
+  instPriceChangeType: 'inst_price_changes',
 };
 
 /// Pull ki tarteeb = apply ki tarteeb (parent pehle).
@@ -27,5 +29,6 @@ const List<String> instPullCollections = [
   'inst_items',
   'inst_plans',
   'inst_payments',
+  'inst_price_changes',
   'inst_photos', // aakhir mein: owner (customer / guarantor) pehle aa chuka ho
 ];

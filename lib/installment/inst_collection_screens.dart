@@ -386,6 +386,9 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
   int _inStock = 0;
   double _stockCost = 0;
   int _repossessedStock = 0;
+  ProfitReport? _profit;
+  StockValue _stock = const StockValue(0, 0, 0);
+  (int, double, double) _rates = (0, 0.0, 0.0);
   bool _loading = true;
 
   @override
@@ -435,9 +438,15 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
     final today = dayStart(DateTime.now());
     final active = (await repo.list(today: today)).where((v) => v.plan.isActive).toList();
     final stock = await InstRepository.instance.items();
+    final profit = await repo.profit(from: _from, to: _to);
+    final sv = await InstRepository.instance.stockValue();
+    final rates = await InstRepository.instance.priceChangeSummary(from: _from, to: _to);
     if (!mounted) return;
     setState(() {
       _r = r;
+      _profit = profit;
+      _stock = sv;
+      _rates = rates;
       _active = active.length;
       _aging = agingOf(active.map((v) => v.status), today);
       _inStock = stock.where((i) => i.status == itemInStock).length;
@@ -488,6 +497,10 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
           child: _loading || r == null
               ? const Center(child: CircularProgressIndicator())
               : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
+                  if (showMoney && _profit != null) ...[
+                    instSectionTitle(p, Loc.t('PROFIT', 'منافع')),
+                    _profitCard(p, _profit!),
+                  ],
                   instSectionTitle(p, Loc.t('COLLECTION', 'وصولی')),
                   _card(p, [
                     _big(p, Loc.t('Total collected', 'کل وصولی'), instRs(r.collectedTotal), p.teal),
@@ -531,12 +544,54 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
                   _card(p, [
                     _line(p, Loc.t('Pieces in stock', 'اسٹاک میں پیس'), '$_inStock'),
                     if (showMoney) _line(p, Loc.t('Stock cost', 'اسٹاک کی لاگت'), instRs(_stockCost)),
+                    _line(p, Loc.t('Stock at cash price', 'نقد قیمت پر اسٹاک'), instRs(_stock.cash)),
+                    if (showMoney)
+                      _line(p, Loc.t('Margin in stock (cash − cost)', 'اسٹاک میں منافع (نقد − لاگت)'), instRs(_stock.margin),
+                          c: _stock.margin >= 0 ? p.teal : p.red),
                     _line(p, Loc.t('Taken-back pieces', 'واپس لیے پیس'), '$_repossessedStock'),
+                    if (_rates.$1 > 0) ...[
+                      const Divider(),
+                      _line(p, Loc.t('Rate changes in period', 'اس دوران ریٹ تبدیلیاں'), '${_rates.$1}'),
+                      _line(p, Loc.t('Cash value change', 'نقد مالیت میں فرق'), _signedRs(_rates.$2), c: _rates.$2 >= 0 ? p.teal : p.red),
+                      if (showMoney && _rates.$3.abs() >= 0.005)
+                        _line(p, Loc.t('Cost value change', 'لاگت میں فرق'), _signedRs(_rates.$3), c: _rates.$3 <= 0 ? p.teal : p.red),
+                    ],
                   ]),
                 ]),
         ),
       ]),
     );
+  }
+
+  String _signedRs(double v) => v >= 0 ? '+${instRs(v)}' : '-${instRs(-v)}';
+
+  Widget _profitCard(AppPalette p, ProfitReport pr) {
+    final ex = pr.expenses.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return _card(p, [
+      _big(p, Loc.t('Net profit', 'خالص منافع'), _signedRs(pr.netProfit), pr.netProfit >= 0 ? p.teal : p.red),
+      _line(p, Loc.t('Profit in collections', 'وصولی میں منافع'), instRs(pr.realizedProfit), c: pr.realizedProfit >= 0 ? p.teal : p.red),
+      _line(p, Loc.t('Late fines', 'لیٹ جرمانہ'), instRs(pr.fines)),
+      _line(p, Loc.t('Gross profit', 'کل منافع'), instRs(pr.grossProfit)),
+      const Divider(),
+      for (final e in ex) _line(p, e.key, '- ${instRs(e.value)}', c: p.red),
+      _line(p, Loc.t('Total expenses', 'کل خرچے'), '- ${instRs(pr.expenseTotal)}', c: p.red),
+      const SizedBox(height: 6),
+      Text(
+        Loc.t('Each installment carries its share of profit: amount × (installment price − cost) ÷ installment price. '
+            'Expenses include salary, rent and bills.',
+            'ہر قسط میں منافع کا حصہ: رقم × (قسط قیمت − لاگت) ÷ قسط قیمت۔ خرچوں میں تنخواہ، کرایہ اور بل شامل ہیں۔'),
+        style: TextStyle(color: p.textMuted, fontSize: 11),
+      ),
+      if (pr.collectedWithoutCost > 0.5)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            Loc.t('${instRs(pr.collectedWithoutCost)} collected on items without purchase cost — their profit is not counted.',
+                '${instRs(pr.collectedWithoutCost)} کی وصولی ایسے سامان کی جس کی خرید قیمت نہیں لکھی — اس کا منافع شامل نہیں۔'),
+            style: TextStyle(color: p.amber, fontSize: 11.5, fontWeight: FontWeight.w600),
+          ),
+        ),
+    ]);
   }
 
   Widget _card(AppPalette p, List<Widget> children) => Container(

@@ -23,7 +23,7 @@ Future<Database> _device() async {
   await db.execute('''CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, entityType TEXT NOT NULL,
     entityId TEXT NOT NULL, operation TEXT NOT NULL, payloadJson TEXT NOT NULL, createdAt INTEGER NOT NULL,
     syncedAt INTEGER, retryCount INTEGER NOT NULL DEFAULT 0, lastError TEXT)''');
-  for (final sql in [...AppDatabase.installmentTablesSql, ...AppDatabase.installmentPlanTablesSql]) {
+  for (final sql in [...AppDatabase.installmentTablesSql, ...AppDatabase.installmentPlanTablesSql, ...AppDatabase.installmentPriceTablesSql]) {
     await db.execute(sql);
   }
   return db;
@@ -71,7 +71,7 @@ void main() {
       expect(pullCollections, contains(e.value));
       expect(branchScopedCollections, contains(e.value));
     }
-    expect(instPullCollections.length, 7);
+    expect(instPullCollections.length, 8);
   });
 
   Future<void> seedA() async {
@@ -95,7 +95,7 @@ void main() {
   test('device A data appears on device B, linked by serverId', () async {
     await seedA();
     final docs = await _cloud(a);
-    expect(docs.keys, containsAll(instPullCollections.where((c) => c != 'inst_photos')));
+    expect(docs.keys, containsAll(instPullCollections.where((c) => c != 'inst_photos' && c != 'inst_price_changes')));
 
     // B: customer aur cash row POS sync se pehle aa chuke (alag local ids).
     await b.insert('customers', {'name': 'Zain', 'serverId': 'customer:BBBB-1'});

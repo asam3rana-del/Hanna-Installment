@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:sqflite/sqflite.dart' show Sqflite;
 
 import '../db/app_database.dart';
+import '../services/session.dart';
 import '../db/party_repository.dart';
 import '../models/party.dart';
 import 'inst_models.dart';
+import 'inst_reports.dart';
 import 'inst_sync.dart';
 
 /// Hanna Installment ka data: customer profile (CNIC...), guarantor, category, item.
@@ -305,8 +307,26 @@ class InstRepository {
       if (item.id == null) {
         id = await txn.insert('inst_items', clean.toMap()..remove('id')..['createdAt'] = now);
       } else {
+        final before = await txn.query('inst_items', where: 'id = ?', whereArgs: [item.id], limit: 1);
         await txn.update('inst_items', clean.toMap(), where: 'id = ?', whereArgs: [item.id]);
         id = item.id!;
+        // Form se qeemat badli: rate history mein bhi (Rate Badlein screen jaisa).
+        if (before.isNotEmpty) {
+          final old = InstItem.fromMap(before.first);
+          if ((old.cashPrice - clean.cashPrice).abs() >= 0.005 || (old.costPrice - clean.costPrice).abs() >= 0.005) {
+            final hid = await txn.insert('inst_price_changes', {
+              'itemId': id,
+              'oldCash': old.cashPrice,
+              'newCash': clean.cashPrice,
+              'oldCost': old.costPrice,
+              'newCost': clean.costPrice,
+              'note': 'Edit',
+              'changedBy': Session.username ?? '',
+              'changedAt': now,
+            });
+            await InstSync.enqueuePriceChange(txn, hid);
+          }
+        }
       }
       await InstSync.enqueueItem(txn, id);
       return id;
@@ -325,6 +345,77 @@ class InstRepository {
       await txn.delete('inst_items', where: 'id = ?', whereArgs: [item.id]);
     });
     _changed();
+  }
+
+  // ================================================================ rate badalna (Step 9)
+
+  /// Stock ke pieces ka naya rate. [newCash] / [newCost]: itemId -> nayi qeemat (null = woh na badlo).
+  /// Sirf stock (in_stock) wale pieces; har tabdeeli ka record `inst_price_changes` mein. Wapas: kitne pieces badle.
+  /// Pehle se bane qist plan NAHI badalte (un ki qeemat plan mein mehfooz hai).
+  Future<int> changeRates({required Map<int, double> newCash, Map<int, double> newCost = const {}, String note = ''}) async {
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager rate badal sakta hai.');
+    final ids = {...newCash.keys, ...newCost.keys};
+    if (ids.isEmpty) throw ArgumentError('Koi piece nahi chuna.');
+    for (final v in [...newCash.values, ...newCost.values]) {
+      if (!v.isFinite || v < 0) throw ArgumentError('Rate minus nahi ho sakta.');
+    }
+    final db = await AppDatabase.instance.database;
+    final now = _now();
+    var changed = 0;
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        final rows = await txn.query('inst_items', where: 'id = ?', whereArgs: [id], limit: 1);
+        if (rows.isEmpty) continue;
+        final it = InstItem.fromMap(rows.first);
+        if (!it.inStock) continue;
+        final cash = newCash[id] ?? it.cashPrice;
+        final cost = newCost[id] ?? it.costPrice;
+        if ((cash - it.cashPrice).abs() < 0.005 && (cost - it.costPrice).abs() < 0.005) continue;
+        await txn.update('inst_items', {'cashPrice': cash, 'costPrice': cost, 'updatedAt': now}, where: 'id = ?', whereArgs: [id]);
+        final hid = await txn.insert('inst_price_changes', {
+          'itemId': id,
+          'oldCash': it.cashPrice,
+          'newCash': cash,
+          'oldCost': it.costPrice,
+          'newCost': cost,
+          'note': note.trim(),
+          'changedBy': Session.username ?? '',
+          'changedAt': now,
+        });
+        await InstSync.enqueueItem(txn, id);
+        await InstSync.enqueuePriceChange(txn, hid);
+        changed++;
+      }
+    });
+    _changed();
+    return changed;
+  }
+
+  /// Ek piece ki rate history (naye pehle).
+  Future<List<PriceChange>> priceHistory(int itemId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query('inst_price_changes', where: 'itemId = ?', whereArgs: [itemId], orderBy: 'changedAt DESC, id DESC');
+    return rows.map(PriceChange.fromMap).toList();
+  }
+
+  /// Muddat ki rate tabdeeliyan (report): (kitni, naqd maliyat ka farq, khareed maliyat ka farq).
+  Future<(int, double, double)> priceChangeSummary({required int from, required int to}) async {
+    final db = await AppDatabase.instance.database;
+    final r = await db.rawQuery(
+        'SELECT COUNT(*) AS n, COALESCE(SUM(newCash - oldCash), 0) AS cash, COALESCE(SUM(newCost - oldCost), 0) AS cost '
+        'FROM inst_price_changes WHERE changedAt >= ? AND changedAt < ?',
+        [from, to]);
+    final m = r.first;
+    return (((m['n'] as num?) ?? 0).toInt(), ((m['cash'] as num?) ?? 0).toDouble(), ((m['cost'] as num?) ?? 0).toDouble());
+  }
+
+  /// Stock ki maliyat (sirf in_stock pieces).
+  Future<StockValue> stockValue() async {
+    final db = await AppDatabase.instance.database;
+    final r = await db.rawQuery(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(costPrice), 0) AS cost, COALESCE(SUM(cashPrice), 0) AS cash FROM inst_items WHERE status = 'in_stock'");
+    final m = r.first;
+    return StockValue(((m['n'] as num?) ?? 0).toInt(), ((m['cost'] as num?) ?? 0).toDouble(), ((m['cash'] as num?) ?? 0).toDouble());
   }
 
   // ================================================================ home stats
@@ -355,4 +446,45 @@ class InstHomeStats {
     this.stockCostValue = 0,
     this.profilesWithoutGuarantor = 0,
   });
+}
+
+/// Rate tabdeeli ka ek record.
+class PriceChange {
+  final int id;
+  final int itemId;
+  final double oldCash;
+  final double newCash;
+  final double oldCost;
+  final double newCost;
+  final String note;
+  final String changedBy;
+  final int changedAt;
+  const PriceChange({
+    required this.id,
+    required this.itemId,
+    required this.oldCash,
+    required this.newCash,
+    required this.oldCost,
+    required this.newCost,
+    required this.note,
+    required this.changedBy,
+    required this.changedAt,
+  });
+
+  bool get costChanged => (newCost - oldCost).abs() >= 0.005;
+
+  factory PriceChange.fromMap(Map<String, Object?> m) {
+    double d(String k) => ((m[k] as num?) ?? 0).toDouble();
+    return PriceChange(
+      id: ((m['id'] as num?) ?? 0).toInt(),
+      itemId: ((m['itemId'] as num?) ?? 0).toInt(),
+      oldCash: d('oldCash'),
+      newCash: d('newCash'),
+      oldCost: d('oldCost'),
+      newCost: d('newCost'),
+      note: (m['note'] as String?) ?? '',
+      changedBy: (m['changedBy'] as String?) ?? '',
+      changedAt: ((m['changedAt'] as num?) ?? 0).toInt(),
+    );
+  }
 }

@@ -77,7 +77,7 @@ service cloud.firestore {
                              'worker_salary_payments', 'shop_rents', 'shop_rent_ledger',
                              'utility_bills', 'utility_bill_payments',
                              // Hanna Installment
-                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos'];
+                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes'];
     }
 
     // Server-side record of which branch each staff UID belongs to.

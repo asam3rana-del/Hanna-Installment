@@ -1095,6 +1095,34 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "inst_price_changes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "branchId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inst_price_changes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "branchId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "pushedAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

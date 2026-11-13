@@ -142,7 +142,7 @@ void main() {
       expect(r.serverTime, 300);
       expect(assemblePullResult({}, 200).serverTime, 200);
       expect(assemblePullResult({'sales': [{'updatedAt': 5}]}, 200).serverTime, 200);
-      expect(pullCollections.length, 36);
+      expect(pullCollections.length, 37);
     });
   });
 

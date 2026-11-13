@@ -17,6 +17,7 @@ import 'inst_pdf.dart';
 import 'inst_photo_widgets.dart';
 import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
+import 'inst_reports.dart' show profitShare;
 import 'inst_repository.dart';
 import 'inst_ui.dart';
 import 'kyc_photo_store.dart';
@@ -1414,8 +1415,11 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
         style: TextStyle(color: p.textMuted, fontSize: 11.5),
       ),
       if (Session.isAdminOrManager && v.plan.costPrice > 0)
-        Text('${Loc.t('Profit on cost', 'لاگت پر منافع')} ${instRs(v.plan.totalPrice - v.plan.costPrice)}',
-            style: TextStyle(color: p.textMuted, fontSize: 11.5)),
+        Text(
+          '${Loc.t('Profit', 'منافع')}: ${instRs(profitShare(collected: st.paid + v.advancePaid, totalPrice: v.plan.totalPrice, costPrice: v.plan.costPrice) ?? 0)}'
+          ' ${Loc.t('received of', 'وصول، کل')} ${instRs(v.plan.totalPrice - v.plan.costPrice)}',
+          style: TextStyle(color: p.textMuted, fontSize: 11.5),
+        ),
     ]);
   }
 
