@@ -7,7 +7,6 @@ import 'package:workmanager/workmanager.dart';
 import '../installment/inst_due_alert.dart';
 import '../services/bill_reminder_service.dart';
 import '../services/due_alert_service.dart';
-import '../services/return_alert_service.dart';
 import 'backup_scheduler.dart';
 import 'offsite_backup.dart';
 
@@ -64,14 +63,11 @@ void backupCallbackDispatcher() {
       await BackupScheduler.instance.checkCheckpoints();
       // Raat 9 ke baad: "aaj ka backup phone se bahar bhejein" (din mein ek dafa, agar bheja nahi).
       await OffsiteBackup.checkAndNotify();
-      // Roz ki due-reminder notification (10 AM ke baad, din mein ek baar).
-      await DueAlertService.checkAndNotify();
+      // Hanna Installment: POS udhaar (due reminder) ki notification band — qist ki apni (InstDueAlert) hai.
       // Utility bills: ek din pehle / due din / guzarne ke baad reminder.
       await BillReminderService.checkAndNotify();
       // Hanna Installment: aaj ki / late qiston ki subah wali notification.
       await InstDueAlert.checkAndNotify();
-      // Amanat / Loan: wapsi ki tarikh aa gayi ho to ek notification.
-      await ReturnAlertService.checkAndNotify();
       return true;
     } catch (_) {
       return false; // Kotlin Result.retry()

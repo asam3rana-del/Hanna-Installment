@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/party.dart';
-import '../screens/party_transaction_screen.dart';
 import '../services/party_photo_store.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
@@ -458,26 +457,12 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                   : ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 40), children: [
                       _profileCard(p, c),
                       const SizedBox(height: 12),
-                      Row(children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.receipt_long_outlined),
-                            label: Text(Loc.t('Ledger', 'کھاتہ')),
-                            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => PartyTransactionScreen(partyId: c.id!, partyName: c.name, isCustomer: true))),
-                          ),
+                      if (c.phone.isNotEmpty)
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.call_outlined),
+                          label: Text(Loc.t('Call', 'کال')),
+                          onPressed: () => _call(c.phone),
                         ),
-                        if (c.phone.isNotEmpty) ...[
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.call_outlined),
-                              label: Text(Loc.t('Call', 'کال')),
-                              onPressed: () => _call(c.phone),
-                            ),
-                          ),
-                        ],
-                      ]),
                       instSectionTitle(p, Loc.t('INSTALLMENT PLANS', 'قسط پلان')),
                       for (final v in _plans)
                         PlanTile(

@@ -28,15 +28,8 @@ import 'about_screen.dart';
 import 'backup_export_screen.dart';
 import 'cash_screen.dart';
 import 'expense_screen.dart';
-import 'items_screen.dart';
 import 'login_screen.dart';
-import 'party_dashboard_screen.dart';
-import 'purchase_screen.dart';
 import 'recycle_bin_screen.dart';
-import 'reports_screen.dart';
-import 'sale_screen.dart';
-import 'setup_guide_screen.dart';
-import 'shell_ledger_screen.dart';
 import 'shop_rent_screen.dart';
 import 'user_management_screen.dart';
 import 'utility_bills_screen.dart';
@@ -52,6 +45,10 @@ import '../widgets/permission_guard.dart';
 /// Login method: password / fingerprint / both / none. Dark mode switch.
 /// Printer (Phase 12) done — Bluetooth 58/80mm. Cloud Sync (Phase 10): `SyncSection` (Sync Now / Setup / History).
 /// OTP login (Phase 10): login method 'otp'. Backup row: BackupExportScreen (admin/manager).
+
+/// Hanna Installment: grocery POS ki settings (sale par stock, credit limit) chhupi hain. Wapas chahiye to true.
+const bool _posFeatures = false;
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -432,13 +429,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () => _open(screen),
         );
     return [
-      row(Icons.people_outline, 'Parties', 'پارٹیز', const PartyDashboardScreen()),
-      row(Icons.list_alt, 'Items', 'آئٹمز', const ItemsScreen()),
-      if (Permissions.canAnyReport()) row(Icons.trending_up, 'Reports', 'رپورٹس', const ReportsScreen()),
-      row(Icons.receipt_outlined, 'Sale', 'سیل', const SaleScreen()),
-      if (Session.isAdmin)
-        row(Icons.shopping_cart_outlined, 'Purchase', 'خریداری',
-            const RoleGuard(allowed: {'admin'}, child: PurchaseScreen())),
+      // Hanna Installment: Parties / Items / Reports / Sale / Purchase / Shell Ledger (grocery POS) hata diye.
       if (Permissions.can('expense'))
         row(Icons.business_center_outlined, 'Expense', 'اخراجات',
             const PermissionGuard(permission: 'expense', child: ExpenseScreen()), color: p.navyInk),
@@ -457,9 +448,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (Permissions.can('zakat'))
         row(Icons.volunteer_activism_outlined, 'Zakat', 'زکوٰۃ',
             const PermissionGuard(permission: 'zakat', child: ZakatScreen()), color: p.navyInk),
-      if (Permissions.can('shell_ledger'))
-        row(Icons.inventory_2_outlined, 'Shell Ledger', 'شیل لیجر',
-            const PermissionGuard(permission: 'shell_ledger', child: ShellLedgerScreen()), color: p.navyInk),
     ];
   }
 
@@ -470,7 +458,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: ThemeManager.palette.bg,
       appBar: AppBar(backgroundColor: ThemeManager.palette.navy, foregroundColor: Colors.white, title: Text(Loc.t('Settings', 'سیٹنگز'))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        PremiumHeader(title: _headerShop, subtitle: Loc.t('POINT OF SALE', 'پوائنٹ آف سیل')),
+        PremiumHeader(title: _headerShop, subtitle: Loc.t('INSTALLMENT SHOP', 'قسط کی دکان')),
         ..._linkRows(),
         const SizedBox(height: 6),
         if (admin)
@@ -496,16 +484,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             FilledButton(onPressed: _saveShop, child: Text(Loc.t('SAVE SETTINGS', 'محفوظ کریں'))),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => const RoleGuard(allowed: {'admin'}, child: SetupGuideScreen())))
-                  .then((_) => _load()),
-              icon: const Icon(Icons.checklist_rtl),
-              label: Text(Loc.t('SHOP SETUP GUIDE (new shop)', 'دکان سیٹ اپ گائیڈ (نئی دکان)')),
-            ),
           ]),
-        if (admin)
+        if (_posFeatures && admin)
           _card(Loc.t('Sale', 'سیل'), Icons.point_of_sale, [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -564,6 +544,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ]),
+        if (_posFeatures)
         _card(Loc.t('Credit limit override', 'کریڈٹ لیمٹ اجازت'), Icons.lock, [
           FutureBuilder<bool>(
             future: CreditOverridePolicy.managersOnly(),
@@ -582,6 +563,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ]),
+        if (_posFeatures)
         _card(Loc.t('Server credit-limit check', 'سرور کریڈٹ لیمٹ چیک'), Icons.shield, [
           FutureBuilder<bool>(
             future: const CreditGuard().isEnabled(),

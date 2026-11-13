@@ -85,6 +85,21 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
   reviewer note, release checklist. Asal nukta: app "loan app" nahi — listing mein loan / qarz / credit alfaaz nahi
 - `READ_CONTACTS` hataya (`tools/android_fix.sh`, `tools:node="remove"` bhi) — Pakistan mein loan apps ko contacts mana
 
+## Pehli green build — 2026-11-13 (repo asam3rana-del/Hanna-Installment, branch Raffey)
+- Analyze + saare tests paas; app phone par chal gayi. Ek test fix: installment_sync_test mein `singleInstance: false`
+  (warna dono `:memory:` ek hi DB)
+
+## Step 8 — done: grocery screens ka safaya
+- 57 UI files mitai (sale, purchase, items/product, stock (adjust/taking/audit/report/rebuild), rate tools, bulk translate,
+  bill scan, party dashboard/ledger, POS reports/balance sheet/monthly, history, receivables, shell ledger, setup guide,
+  purana POS dashboard, Amanat/Loan, POS udhaar wasooli (collection hub / queue / due reminders / payments)) + services/collection_actions
+- Raste band: Settings se Parties/Items/Reports/Sale/Purchase/Shell Ledger/Setup guide; POS ki Sale + credit-limit settings
+  `_posFeatures = false` ke peeche; Day Book se bill nahi khulta; customer screen se POS "Ledger" hata; Shop tools se "Advanced"
+- POS udhaar (DueAlertService.checkAndNotify) aur Amanat/Loan (ReturnAlertService) notifications band; qist + bills + backup chalti
+- Crash dialog (pichhli crash ka log / developer ko bhejna) ab Installment Home par
+- DB / sync / repositories / helper code NAHI hataya — sync engine aur tests un par chalte hain; app mein nazar nahi aate
+- `import-zip.yml`: zip mein `.import-delete.txt` ho to us ki files repo se mitata hai (rsync khud nahi mitata).
+  Workflow file bot update nahi kar sakta — user ne haath se paste ki
+
 ## Abhi baqi
-- Pehli green build ke baad grocery code (sale/purchase/units/bill scan/rate list, Amanat/Loan screen) ka asal safaya
 - Installment ka alag icon + feature graphic

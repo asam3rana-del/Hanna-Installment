@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:firebase_auth/firebase_auth.dart' show PhoneAuthCredential;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+
+import '../app_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../db/user_repository.dart';
@@ -621,9 +623,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   CircleAvatar(radius: 40, backgroundColor: Colors.white, child: Icon(Icons.lock, size: 36, color: ThemeManager.palette.navyInk)),
                   const SizedBox(height: 16),
-                  const Text('IBTISAAM Kiryana Store', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold)),
+                  Text(AppInfo.appName, style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(_setupMode ? Loc.t('First-time setup', 'پہلی دفعہ سیٹ اپ') : 'Point of Sale',
+                  Text(_setupMode ? Loc.t('First-time setup', 'پہلی دفعہ سیٹ اپ') : Loc.t('Installment sales record', 'قسط کا حساب'),
                       style: TextStyle(color: ThemeManager.palette.headerSubtitleColor)),
                   const SizedBox(height: 26),
                   Card(

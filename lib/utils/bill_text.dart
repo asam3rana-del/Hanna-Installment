@@ -39,7 +39,7 @@ String buildSaleBillText({
   }
 
   final rule = '-' * width;
-  b.writeln(center(shopName.isEmpty ? 'IBTISAAM Kiryana Store' : shopName));
+  b.writeln(center(shopName.isEmpty ? 'Hanna Installment' : shopName));
   if (shopOwner.trim().isNotEmpty) b.writeln(center(shopOwner.trim()));
   if (shopPhone.isNotEmpty) b.writeln(center(shopPhone));
   b.writeln(rule);
@@ -101,7 +101,7 @@ String buildPurchaseBillText({
   }
 
   final rule = '-' * width;
-  b.writeln(center(shopName.isEmpty ? 'IBTISAAM Kiryana Store' : shopName));
+  b.writeln(center(shopName.isEmpty ? 'Hanna Installment' : shopName));
   if (shopOwner.trim().isNotEmpty) b.writeln(center(shopOwner.trim()));
   if (shopPhone.isNotEmpty) b.writeln(center(shopPhone));
   b.writeln(center('PURCHASE BILL'));

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app_info.dart';
 import '../screens/login_screen.dart';
 import '../screens/settings_screen.dart';
+import '../services/crash_handler.dart';
+import '../services/crash_reporter.dart';
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
@@ -39,6 +44,64 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     _load();
     // Android 13+: roz ki qist notification ke liye ijazat (pehli baar poochta hai).
     BillReminderService.requestPermission();
+    // Pichhli dafa app band (crash) hui ho to log dikhao / developer ko bhejo (purane POS dashboard se).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkLastCrash());
+  }
+
+  /// Kotlin `showCrashDialog`: pichli baar crash hui ho to log dikhao (Share / Copy / Dismiss).
+  Future<void> _checkLastCrash() async {
+    final text = await CrashHandler.getLastCrash();
+    if (text == null || !mounted) return;
+    // Cloud Sync juda ho to developer ko khud (Firestore crash_reports) — dialog ka intezar kiye baghair.
+    CrashReporter.uploadIfNew(text).ignore();
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(Loc.t('App crashed last time', 'پچھلی بار ایپ کریش ہوئی تھی')),
+        content: SingleChildScrollView(
+          child: SelectableText(CrashHandler.preview(text), style: const TextStyle(fontSize: 12)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              try {
+                await launchUrl(CrashReporter.whatsAppUri(text), mode: LaunchMode.externalApplication);
+              } catch (_) {}
+              await CrashHandler.clearLastCrash();
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            child: Text(Loc.t('Send to developer', 'ڈیولپر کو بھیجیں')),
+          ),
+          TextButton(
+            onPressed: () async {
+              await Share.share(text, subject: 'Hanna Installment Crash Log');
+              await CrashHandler.clearLastCrash();
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            child: Text(Loc.t('Share', 'شیئر کریں')),
+          ),
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: text));
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text(Loc.t('Copied', 'کاپی ہو گیا'))),
+                );
+              }
+            },
+            child: Text(Loc.t('Copy', 'کاپی')),
+          ),
+          TextButton(
+            onPressed: () async {
+              await CrashHandler.clearLastCrash();
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            child: Text(Loc.t('Dismiss', 'برخاست کریں')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -135,7 +198,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _tapStat(p, Loc.t('Collected today', 'آج وصولی'), instRs(_col.collectedToday),
+                  child: _tapStat(p, Loc.t('Collected', 'آج وصولی'), instRs(_col.collectedToday),
                       Loc.t('Receivable ${instRs(_col.receivable)}', 'کل باقی ${instRs(_col.receivable)}'), p.teal,
                       () => _push(const InstPlansScreen())),
                 ),

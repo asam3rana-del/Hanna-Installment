@@ -11,8 +11,6 @@ import '../db/due_followup_repository.dart';
 import '../installment/inst_collection_screens.dart';
 import '../installment/inst_due_alert.dart';
 import '../models/collection_autopilot.dart';
-import '../screens/collection_hub_screen.dart';
-import '../screens/amanat_loan_screen.dart';
 import '../screens/utility_bills_screen.dart';
 import 'app_lock.dart';
 
@@ -81,17 +79,10 @@ class DueAlertService {
       });
       return;
     }
-    if (payload != _payload && payload != queuePayload && payload != billsPayload && payload != returnPayload) return;
+    // Hanna Installment: POS ki udhaar / Amanat screens nahi — sirf Utility Bills (purani notification tap).
+    if (payload != billsPayload) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      AppLock.navigatorKey.currentState?.push(MaterialPageRoute(
-        builder: (_) => payload == queuePayload
-            ? const CollectionHubScreen(initialTab: 0)
-            : payload == billsPayload
-            ? const UtilityBillsScreen()
-            : payload == returnPayload
-                ? const AmanatLoanScreen()
-                : const CollectionHubScreen(initialTab: 1),
-      ));
+      AppLock.navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const UtilityBillsScreen()));
     });
   }
 

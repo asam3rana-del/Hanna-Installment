@@ -4,7 +4,6 @@ import '../screens/about_screen.dart';
 import '../screens/backup_export_screen.dart';
 import '../screens/cash_register_screen.dart';
 import '../screens/cash_screen.dart';
-import '../screens/dashboard_screen.dart';
 import '../screens/day_book_screen.dart';
 import '../screens/expense_screen.dart';
 import '../screens/recycle_bin_screen.dart';
@@ -19,7 +18,7 @@ import 'inst_ui.dart';
 
 /// Step 5: POS ki sirf woh screens jo qist ki dukaan ko chahiye (cash, kharche, day book, workers, kiraya,
 /// bills, backup, users). Grocery wali (sale / purchase / units / bill scan / rate list...) yahan nahi.
-/// Purana POS dashboard sirf Admin ke liye neeche "Advanced" mein (pehli green build ke baad code bhi hatega).
+/// Purana POS dashboard aur grocery screens app se hata diye gaye (Step 8).
 class InstShopToolsScreen extends StatelessWidget {
   const InstShopToolsScreen({super.key});
 
@@ -63,14 +62,6 @@ class InstShopToolsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => open())),
                 ),
               ),
-            if (admin) ...[
-              const SizedBox(height: 12),
-              TextButton.icon(
-                icon: const Icon(Icons.storefront_outlined, size: 18),
-                label: Text(Loc.t('Advanced: full POS dashboard', 'ایڈوانس: پورا POS ڈیش بورڈ')),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DashboardScreen())),
-              ),
-            ],
           ]),
         ),
       ]),

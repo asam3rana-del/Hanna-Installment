@@ -19,7 +19,6 @@ import 'services/crash_handler.dart';
 import 'services/demo_mode.dart';
 import 'services/bill_reminder_service.dart';
 import 'services/due_alert_service.dart';
-import 'services/return_alert_service.dart';
 import 'services/session.dart';
 import 'sync/branch_config_store.dart';
 import 'sync/device_tag.dart';
@@ -77,10 +76,9 @@ void main() async {
   // Roz ki due-reminder notification: app khulte hi check; tap par Due Reminders screen.
   try {
     await DueAlertService.init(withTap: true);
-    unawaited(DueAlertService.checkAndNotify());
+    // Hanna Installment: POS udhaar / Amanat-Loan notifications band; qist + bills + backup chalti hain.
     unawaited(BillReminderService.checkAndNotify());
     unawaited(InstDueAlert.checkAndNotify());
-    unawaited(ReturnAlertService.checkAndNotify());
     unawaited(OffsiteBackup.checkAndNotify());
   } catch (_) {}
   runApp(const AhDeveloperApp());

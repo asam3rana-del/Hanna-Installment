@@ -13,7 +13,7 @@ qarz lene wala nahi. Reviewer ko yahi saaf nazar aana chahiye:
   Likhein: *installment sales record*, *qist hisaab*, *shop bookkeeping*.
 - App ke andar koi raqam dene, apply karne ya qarz manzoor karne ka button nahi hai. Aisa kuch kabhi add na karein.
 - `READ_CONTACTS` ijazat hata di gayi hai (`tools/android_fix.sh`).
-- POS ki "Amanat / Loan" screen sirf admin ke "Advanced" mein hai. Grocery code ke safaye mein ise bhi hataya jayega.
+- POS ki "Amanat / Loan" screen aur us ki notification Step 8 mein app se hata di gayi.
 - **Financial features declaration** (Play Console > App content):
   - "My app doesn't provide any financial features" chunein, kyun ke app koi financial product (qarz, investment,
     payment, wallet) offer nahi karti. Yeh sirf karobar ka record hai.
