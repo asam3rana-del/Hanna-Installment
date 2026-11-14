@@ -19,6 +19,7 @@ import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
 import 'inst_purchase_screens.dart';
 import 'inst_report_screens.dart';
+import 'inst_update.dart';
 import 'inst_repository.dart';
 import 'inst_shop_tools_screen.dart';
 import '../license/license_screen.dart';
@@ -50,6 +51,10 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     BillReminderService.requestPermission();
     // Pichhli dafa app band (crash) hui ho to log dikhao / developer ko bhejo (purane POS dashboard se).
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkLastCrash());
+    // Naya update (har 6 ghante mein ek dafa, internet ho to).
+    WidgetsBinding.instance.addPostFrameCallback((_) => Future.delayed(const Duration(seconds: 4), () {
+          if (mounted) InstUpdate.checkOnStart(context);
+        }));
   }
 
   /// Kotlin `showCrashDialog`: pichli baar crash hui ho to log dikhao (Share / Copy / Dismiss).

@@ -15,6 +15,7 @@ import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
 import 'inst_ui.dart';
+import 'inst_update.dart';
 
 /// Step 5: POS ki sirf woh screens jo qist ki dukaan ko chahiye (cash, kharche, day book, workers, kiraya,
 /// bills, backup, users). Grocery wali (sale / purchase / units / bill scan / rate list...) yahan nahi.
@@ -62,6 +63,25 @@ class InstShopToolsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => open())),
                 ),
               ),
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: instCard(p),
+              child: ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: p.teal.withOpacity(0.13), borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.system_update, color: p.teal),
+                ),
+                title: Text(Loc.t('Check for update', 'اپڈیٹ چیک کریں'), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    InstUpdate.currentBuild > 0
+                        ? Loc.t('This app: build ${InstUpdate.currentBuild}', 'یہ ایپ: build ${InstUpdate.currentBuild}')
+                        : Loc.t('Get the newest version', 'نیا ورژن حاصل کریں'),
+                    style: TextStyle(color: p.textMuted, fontSize: 12)),
+                trailing: Icon(Icons.chevron_right, color: p.textMuted),
+                onTap: () => InstUpdate.checkNow(context),
+              ),
+            ),
           ]),
         ),
       ]),
