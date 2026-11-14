@@ -10,9 +10,9 @@ import 'license_keys.dart';
 
 /// Is device ka license: device code, key, tareekh ki hifazat, aur "likh sakte hain?" ka faisla.
 ///
-/// * Device code: pehli dafa 10 random byte -> Base32 (16 harf). Secure storage (Android Keystore / Windows DPAPI) mein,
-///   is liye phone ka backup naye phone par restore ho to bhi code wahi NAHI aata (Keystore key saath nahi jati) —
-///   ek key do phone par nahi chalti. App uninstall / data clear = naya code (nayi key chahiye).
+/// * Device code: pehli dafa 10 random byte -> Base32 (16 harf). Secure storage (Android Keystore / Windows DPAPI) +
+///   SharedPreferences dono mein (ek na chale to doosra). Android backup band (allowBackup=false), is liye naye phone
+///   par code nahi jata — ek key do phone par nahi chalti. App uninstall / data clear = naya code (nayi key chahiye).
 /// * Key: secure storage + SharedPreferences (key khud raaz nahi — device se bandhi hai).
 /// * Aakhri dekhi tareekh: dono jagah, bari wali maani jati hai; har check par aage barhti hai. Phone ki tareekh is se
 ///   1 din se zyada peeche ho to [LicenseStatus.clockBack] (app sirf dekhne ke liye).
@@ -25,7 +25,11 @@ class LicenseService {
   static const _kKey = 'hanna_lic_key_v1';
   static const _kSeen = 'hanna_lic_seen_v1';
 
-  final _secure = const FlutterSecureStorage();
+  // Wahi options jo backup password (lib/backup/backup_password_store.dart) ke hain. Pehle yahan default options the:
+  // flutter_secure_storage 9 mein jab koi aur hissa encryptedSharedPreferences: true se chalta hai to plugin purani
+  // (non-encrypted) entries ko EncryptedSharedPreferences mein le jata hai aur purani jagah se mita deta hai — phir
+  // license ko apna device code nahi milta tha, har dafa naya banta tha ("This key is for another device").
+  final _secure = const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
 
   /// Har check ke baad (banner / gate dobara banne ke liye).
   final ValueNotifier<LicenseStatus?> status = ValueNotifier<LicenseStatus?>(null);
@@ -79,8 +83,7 @@ class LicenseService {
       await _secure.write(key: k, value: v);
       secureOk = true;
     } catch (_) {}
-    // Device code sirf secure storage mein (prefs Android backup se doosre phone par ja sakta hai) — magar secure
-    // storage hi na chale (kuch purane phone) to majboori mein prefs.
+    // prefsToo = false ho to prefs sirf tab jab secure storage na chale.
     if (prefsToo || !secureOk) {
       try {
         await (await SharedPreferences.getInstance()).setString(k, v);
@@ -95,8 +98,10 @@ class LicenseService {
     if (d == null || normalizeLicenseText(d).length != 16) {
       final r = Random.secure();
       d = base32Encode([for (var i = 0; i < 10; i++) r.nextInt(256)]);
-      await _write(_kDevice, d, prefsToo: false);
     }
+    // Hamesha dono jagah (secure + prefs): secure storage kabhi parh na sake to bhi wahi code mile. Android backup
+    // band hai (tools/android_fix.sh: allowBackup="false"), is liye prefs doosre phone par nahi jate.
+    await _write(_kDevice, d);
     return _device = normalizeLicenseText(d);
   }
 
