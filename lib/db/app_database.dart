@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 40;
+  static const _dbVersion = 43;
 
   Database? _db;
 
@@ -355,7 +355,7 @@ class AppDatabase {
       )
     ''');
 
-    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql]) {
+    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql, ...installmentPurchaseTablesSql, ...installmentCashSaleTablesSql, ...installmentPurchaseReturnTablesSql]) {
       batch.execute(sql);
     }
     final seedAt = DateTime.now().millisecondsSinceEpoch;
@@ -613,6 +613,26 @@ class AppDatabase {
     if (oldVersion < 40) {
       // v40: Hanna Installment Step 9 — stock ke rate ki tabdeeli ka record (purana -> naya, kis ne, kab).
       for (final sql in installmentPriceTablesSql) {
+        await db.execute(sql);
+      }
+    }
+    if (oldVersion < 41) {
+      // v41: Hanna Installment — khareed (purchase): supplier, khareed ka bill, supplier ko adaigi; piece -> bill.
+      await _addColumnIfMissing(db, 'inst_items', 'purchaseId', 'INTEGER');
+      for (final sql in installmentPurchaseTablesSql) {
+        await db.execute(sql);
+      }
+    }
+    if (oldVersion < 42) {
+      // v42: Hanna Installment — naqd (cash) sale: piece bina qist ke bikta hai.
+      for (final sql in installmentCashSaleTablesSql) {
+        await db.execute(sql);
+      }
+    }
+    if (oldVersion < 43) {
+      // v43: supplier ko maal wapas (purchase return); naqd sale ka customer (customers list se, ikhtiyari).
+      await _addColumnIfMissing(db, 'inst_cash_sales', 'customerId', 'INTEGER');
+      for (final sql in installmentPurchaseReturnTablesSql) {
         await db.execute(sql);
       }
     }
@@ -990,7 +1010,8 @@ class AppDatabase {
         purchaseDate INTEGER NOT NULL DEFAULT 0,
         createdAt INTEGER NOT NULL DEFAULT 0,
         updatedAt INTEGER NOT NULL DEFAULT 0,
-        serverId TEXT
+        serverId TEXT,
+        purchaseId INTEGER
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_items_category ON inst_items (categoryId, status)',
@@ -1078,6 +1099,101 @@ class AppDatabase {
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_price_changes_item ON inst_price_changes (itemId, changedAt)',
+  ];
+
+  /// v41: khareed. Supplier ka baqi = openingBalance + SUM(purchases.total) - SUM(payments.amount).
+  /// `inst_items.purchaseId` = kis bill se aaya (column: inst_items create + v41 migration; index nahi — pieces kam hote hain).
+  static const installmentPurchaseTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS inst_suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL DEFAULT '',
+        address TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        openingBalance REAL NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS inst_purchases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        billNo TEXT NOT NULL DEFAULT '',
+        supplierId INTEGER NOT NULL,
+        purchaseDate INTEGER NOT NULL DEFAULT 0,
+        total REAL NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        createdBy TEXT NOT NULL DEFAULT '',
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_purchases_supplier ON inst_purchases (supplierId, purchaseDate)',
+    '''
+      CREATE TABLE IF NOT EXISTS inst_supplier_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplierId INTEGER NOT NULL,
+        purchaseId INTEGER,
+        amount REAL NOT NULL DEFAULT 0,
+        method TEXT NOT NULL DEFAULT 'cash',
+        note TEXT NOT NULL DEFAULT '',
+        paidBy TEXT NOT NULL DEFAULT '',
+        paidAt INTEGER NOT NULL DEFAULT 0,
+        cashTxId INTEGER,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_supplier_payments_supplier ON inst_supplier_payments (supplierId, paidAt)',
+  ];
+
+  /// v42: naqd sale. `costPrice` = bechte waqt piece ki khareed (munafa ke liye; baad ka rate badalna isay nahi badalta).
+  static const installmentCashSaleTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS inst_cash_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        saleNo TEXT NOT NULL DEFAULT '',
+        itemId INTEGER NOT NULL,
+        customerName TEXT NOT NULL DEFAULT '',
+        phone TEXT NOT NULL DEFAULT '',
+        price REAL NOT NULL DEFAULT 0,
+        costPrice REAL NOT NULL DEFAULT 0,
+        method TEXT NOT NULL DEFAULT 'cash',
+        note TEXT NOT NULL DEFAULT '',
+        soldBy TEXT NOT NULL DEFAULT '',
+        soldAt INTEGER NOT NULL DEFAULT 0,
+        cashTxId INTEGER,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT,
+        customerId INTEGER
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_cash_sales_sold ON inst_cash_sales (soldAt)',
+  ];
+
+  /// v43: supplier ko wapas kiya piece (ek row = ek piece). `amount` = supplier ke khate se kam (aam taur par khareed qeemat).
+  static const installmentPurchaseReturnTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS inst_purchase_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplierId INTEGER NOT NULL,
+        purchaseId INTEGER,
+        itemId INTEGER NOT NULL,
+        amount REAL NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        returnedBy TEXT NOT NULL DEFAULT '',
+        returnedAt INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_purchase_returns_supplier ON inst_purchase_returns (supplierId, returnedAt)',
   ];
 
   static List<Map<String, Object?>> _defaultInstCategoryRows(int now) => [

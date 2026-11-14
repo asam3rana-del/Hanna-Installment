@@ -94,7 +94,7 @@ service cloud.firestore {
                              'worker_salary_payments', 'shop_rents', 'shop_rent_ledger',
                              'utility_bills', 'utility_bill_payments',
                              // Hanna Installment
-                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes'];
+                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns'];
     }
 
     // Server-side record of which branch each staff UID belongs to.
@@ -228,13 +228,13 @@ service cloud.firestore {
       return collection in ['customers', 'products', 'sales', 'payments', 'expenses', 'cash_transactions',
                             'cash_register', 'units', 'categories', 'returns', 'stock_movements',
                             'app_settings', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
-                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes'];
+                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns'];
     }
     function cashierMayCreate(collection) {
       return notTombstone() && collection in ['customers', 'sales', 'payments', 'expenses', 'cash_transactions',
                             'cash_register', 'returns', 'stock_movements', 'shell_customers',
                             'shell_transactions', 'shop_empty_shell_log',
-                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes'];
+                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales'];
     }
     function cashierMayUpdate(collection) {
       return notTombstone() && (
@@ -244,7 +244,7 @@ service cloud.firestore {
           && !changedKeys().hasAny(['creditLimit', 'openingBalance', 'stuckBalance', '_deleted']))
         || collection in ['sales', 'payments', 'expenses', 'cash_transactions', 'cash_register', 'returns',
                           'stock_movements', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
-                          'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes']);
+                          'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales']);
     }
 
     // Reads of a document that does not exist yet (resource == null) must not error out:
@@ -286,7 +286,7 @@ service cloud.firestore {
                              'worker_salary_payments', 'shop_rents', 'shop_rent_ledger',
                              'utility_bills', 'utility_bill_payments',
                              // Hanna Installment
-                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes'];
+                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns'];
     }
 
     // Server-side record of which branch each staff UID belongs to.

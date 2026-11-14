@@ -20,7 +20,8 @@ export 'inst_sync_names.dart';
 /// Local ids har device par alag — is liye har reference doosre record ki `serverId` se:
 ///   profile -> customerServerId, guarantor -> customerServerId, item -> categoryServerId,
 ///   plan -> customerServerId + itemServerId + guarantorServerIds (+ poora schedule plan ke andar),
-///   payment -> planServerId + cashServerId (saath wali cash_transactions row, jo POS khud sync karta hai).
+///   payment -> planServerId + cashServerId (saath wali cash_transactions row, jo POS khud sync karta hai),
+///   purchase -> supplierServerId, item -> purchaseServerId, supplier payment -> supplier/purchase/cashServerId.
 /// Tasveerein sync NAHI hoti (Firebase Spark par Storage nahi) — sirf is device par.
 
 String _s(Object? v) => v is String ? v : '';
@@ -137,11 +138,13 @@ class InstSync {
     final it = await _row(ex, 'inst_items', 'id', id);
     if (it == null) return;
     final cat = await _categoryServerId(ex, _i(it['categoryId']));
+    final pur = it['purchaseId'] is num ? await purchaseServerId(ex, _i(it['purchaseId'])) : null;
     final eid = _own('inst_item:', it);
     await _stampServerId(ex, 'inst_items', 'id', id, eid);
     await SyncQueueHelper.enqueue(ex, instItemType, eid, 'upsert', _stamp({
       'serverId': eid,
       'categoryServerId': cat,
+      'purchaseServerId': pur,
       for (final k in const ['brand', 'model', 'color', 'idValues', 'supplier', 'note', 'status']) k: _s(it[k]),
       'costPrice': _d(it['costPrice']),
       'cashPrice': _d(it['cashPrice']),
@@ -241,6 +244,129 @@ class InstSync {
     }));
   }
 
+  // ---------------------------------------------------------------- khareed (v41)
+
+  static Future<void> enqueueSupplier(DatabaseExecutor ex, int id) async {
+    final r = await _row(ex, 'inst_suppliers', 'id', id);
+    if (r == null) return;
+    final eid = _own('inst_supplier:', r);
+    await _stampServerId(ex, 'inst_suppliers', 'id', id, eid);
+    await SyncQueueHelper.enqueue(ex, instSupplierType, eid, 'upsert', _stamp({
+      'serverId': eid,
+      for (final k in const ['name', 'phone', 'address', 'note']) k: _s(r[k]),
+      'openingBalance': _d(r['openingBalance']),
+      'createdAt': _i(r['createdAt']),
+    }));
+  }
+
+  static Future<String?> supplierServerId(DatabaseExecutor ex, int supplierId) async {
+    final r = await _row(ex, 'inst_suppliers', 'id', supplierId);
+    if (r == null) return null;
+    if (_sn(r['serverId']) == null) await enqueueSupplier(ex, supplierId);
+    return _sn((await _row(ex, 'inst_suppliers', 'id', supplierId))?['serverId']);
+  }
+
+  static Future<void> enqueuePurchase(DatabaseExecutor ex, int id) async {
+    final r = await _row(ex, 'inst_purchases', 'id', id);
+    if (r == null) return;
+    final ssid = await supplierServerId(ex, _i(r['supplierId']));
+    if (ssid == null) return;
+    final eid = _own('inst_purchase:', r);
+    await _stampServerId(ex, 'inst_purchases', 'id', id, eid);
+    await SyncQueueHelper.enqueue(ex, instPurchaseType, eid, 'upsert', _stamp({
+      'serverId': eid,
+      'supplierServerId': ssid,
+      for (final k in const ['billNo', 'note', 'createdBy']) k: _s(r[k]),
+      'total': _d(r['total']),
+      'purchaseDate': _i(r['purchaseDate']),
+      'createdAt': _i(r['createdAt']),
+    }));
+  }
+
+  static Future<String?> purchaseServerId(DatabaseExecutor ex, int purchaseId) async {
+    final r = await _row(ex, 'inst_purchases', 'id', purchaseId);
+    if (r == null) return null;
+    if (_sn(r['serverId']) == null) await enqueuePurchase(ex, purchaseId);
+    return _sn((await _row(ex, 'inst_purchases', 'id', purchaseId))?['serverId']);
+  }
+
+  static Future<void> enqueueSupplierPayment(DatabaseExecutor ex, int id) async {
+    final r = await _row(ex, 'inst_supplier_payments', 'id', id);
+    if (r == null) return;
+    final ssid = await supplierServerId(ex, _i(r['supplierId']));
+    if (ssid == null) return;
+    final psid = r['purchaseId'] is num ? await purchaseServerId(ex, _i(r['purchaseId'])) : null;
+    String? cashSid;
+    final cashId = r['cashTxId'];
+    if (cashId is num) {
+      final cash = await _row(ex, 'cash_transactions', 'id', cashId.toInt());
+      if (cash != null) cashSid = SyncQueueHelper.cashTransactionEntityId(cash);
+    }
+    final eid = _own('inst_supplier_payment:', r);
+    await _stampServerId(ex, 'inst_supplier_payments', 'id', id, eid);
+    await SyncQueueHelper.enqueue(ex, instSupplierPaymentType, eid, 'upsert', _stamp({
+      'serverId': eid,
+      'supplierServerId': ssid,
+      'purchaseServerId': psid,
+      'cashServerId': cashSid,
+      for (final k in const ['method', 'note', 'paidBy']) k: _s(r[k]),
+      'amount': _d(r['amount']),
+      'paidAt': _i(r['paidAt']),
+      'createdAt': _i(r['createdAt']),
+    }));
+  }
+
+  // ---------------------------------------------------------------- naqd sale (v42)
+
+  static Future<void> enqueueCashSale(DatabaseExecutor ex, int id) async {
+    final r = await _row(ex, 'inst_cash_sales', 'id', id);
+    if (r == null) return;
+    final isid = await itemServerId(ex, _i(r['itemId']));
+    if (isid == null) return;
+    String? cashSid;
+    final cashId = r['cashTxId'];
+    if (cashId is num) {
+      final cash = await _row(ex, 'cash_transactions', 'id', cashId.toInt());
+      if (cash != null) cashSid = SyncQueueHelper.cashTransactionEntityId(cash);
+    }
+    final csid = r['customerId'] is num ? await customerServerId(ex, _i(r['customerId'])) : null;
+    final eid = _own('inst_cash_sale:', r);
+    await _stampServerId(ex, 'inst_cash_sales', 'id', id, eid);
+    await SyncQueueHelper.enqueue(ex, instCashSaleType, eid, 'upsert', _stamp({
+      'serverId': eid,
+      'itemServerId': isid,
+      'customerServerId': csid,
+      'cashServerId': cashSid,
+      for (final k in const ['saleNo', 'customerName', 'phone', 'method', 'note', 'soldBy']) k: _s(r[k]),
+      'price': _d(r['price']),
+      'costPrice': _d(r['costPrice']),
+      'soldAt': _i(r['soldAt']),
+      'createdAt': _i(r['createdAt']),
+    }));
+  }
+
+  static Future<void> enqueuePurchaseReturn(DatabaseExecutor ex, int id) async {
+    final r = await _row(ex, 'inst_purchase_returns', 'id', id);
+    if (r == null) return;
+    final ssid = await supplierServerId(ex, _i(r['supplierId']));
+    final isid = await itemServerId(ex, _i(r['itemId']));
+    if (ssid == null || isid == null) return;
+    final psid = r['purchaseId'] is num ? await purchaseServerId(ex, _i(r['purchaseId'])) : null;
+    final eid = _own('inst_purchase_return:', r);
+    await _stampServerId(ex, 'inst_purchase_returns', 'id', id, eid);
+    await SyncQueueHelper.enqueue(ex, instPurchaseReturnType, eid, 'upsert', _stamp({
+      'serverId': eid,
+      'supplierServerId': ssid,
+      'purchaseServerId': psid,
+      'itemServerId': isid,
+      'amount': _d(r['amount']),
+      'note': _s(r['note']),
+      'returnedBy': _s(r['returnedBy']),
+      'returnedAt': _i(r['returnedAt']),
+      'createdAt': _i(r['createdAt']),
+    }));
+  }
+
   /// Delete se PEHLE bulayein (row se serverId chahiye). serverId na ho (kabhi push hi nahi hua) to kuch nahi.
   static Future<void> enqueueDeleteRow(DatabaseExecutor ex, String type, String table, String keyCol, Object key) async {
     final r = await _row(ex, table, keyCol, key);
@@ -261,8 +387,32 @@ class InstSync {
     for (final r in await ex.query('inst_guarantors', columns: ['id'])) {
       await enqueueGuarantor(ex, _i(r['id']));
     }
+    final hasPurchases = (await ex.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_purchases'")).isNotEmpty;
+    if (hasPurchases) {
+      for (final r in await ex.query('inst_suppliers', columns: ['id'])) {
+        await enqueueSupplier(ex, _i(r['id']));
+      }
+      for (final r in await ex.query('inst_purchases', columns: ['id'])) {
+        await enqueuePurchase(ex, _i(r['id']));
+      }
+    }
     for (final r in await ex.query('inst_items', columns: ['id'])) {
       await enqueueItem(ex, _i(r['id']));
+    }
+    if (hasPurchases) {
+      for (final r in await ex.query('inst_supplier_payments', columns: ['id'])) {
+        await enqueueSupplierPayment(ex, _i(r['id']));
+      }
+    }
+    if ((await ex.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_cash_sales'")).isNotEmpty) {
+      for (final r in await ex.query('inst_cash_sales', columns: ['id'])) {
+        await enqueueCashSale(ex, _i(r['id']));
+      }
+    }
+    if ((await ex.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_purchase_returns'")).isNotEmpty) {
+      for (final r in await ex.query('inst_purchase_returns', columns: ['id'])) {
+        await enqueuePurchaseReturn(ex, _i(r['id']));
+      }
     }
     for (final r in await ex.query('inst_plans', columns: ['id'])) {
       await enqueuePlan(ex, _i(r['id']));
@@ -322,6 +472,67 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       await db.insert('inst_categories', {...values, 'createdAt': _i(d['createdAt']) == 0 ? nowMs() : _i(d['createdAt'])});
     } else {
       await db.update('inst_categories', values, where: 'id = ?', whereArgs: [local['id']]);
+    }
+  }
+
+  final hasPurchases = (await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_purchases'")).isNotEmpty;
+
+  // ---- suppliers (khareed)
+  if (hasPurchases) {
+    for (final d in of('inst_suppliers')) {
+      final sid = _sn(d['serverId']);
+      if (sid == null || await pending(instSupplierType, sid)) continue;
+      final localId = await _localIdBySid(db, 'inst_suppliers', sid);
+      if (d['_deleted'] == true) {
+        if (localId != null) {
+          final used = (Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inst_purchases WHERE supplierId = ?', [localId])) ?? 0) +
+              (Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inst_supplier_payments WHERE supplierId = ?', [localId])) ?? 0);
+          if (used == 0) await db.delete('inst_suppliers', where: 'id = ?', whereArgs: [localId]);
+        }
+        continue;
+      }
+      final name = _s(d['name']).trim();
+      if (name.isEmpty) continue;
+      final values = <String, Object?>{
+        'name': name,
+        for (final k in const ['phone', 'address', 'note']) k: _s(d[k]),
+        'openingBalance': _d(d['openingBalance']),
+        'updatedAt': _i(d['updatedAt']),
+      };
+      if (localId == null) {
+        await db.insert('inst_suppliers', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
+      } else {
+        await db.update('inst_suppliers', values, where: 'id = ?', whereArgs: [localId]);
+      }
+    }
+
+    // ---- khareed ke bill
+    for (final d in of('inst_purchases')) {
+      final sid = _sn(d['serverId']);
+      if (sid == null || await pending(instPurchaseType, sid)) continue;
+      final localId = await _localIdBySid(db, 'inst_purchases', sid);
+      if (d['_deleted'] == true) {
+        if (localId != null) {
+          await db.update('inst_items', {'purchaseId': null}, where: 'purchaseId = ?', whereArgs: [localId]);
+          await db.update('inst_supplier_payments', {'purchaseId': null}, where: 'purchaseId = ?', whereArgs: [localId]);
+          await db.delete('inst_purchases', where: 'id = ?', whereArgs: [localId]);
+        }
+        continue;
+      }
+      final supId = await _localIdBySid(db, 'inst_suppliers', _s(d['supplierServerId']));
+      if (supId == null) continue;
+      final values = <String, Object?>{
+        'supplierId': supId,
+        for (final k in const ['billNo', 'note', 'createdBy']) k: _s(d[k]),
+        'total': _d(d['total']),
+        'purchaseDate': _i(d['purchaseDate']),
+        'updatedAt': _i(d['updatedAt']),
+      };
+      if (localId == null) {
+        await db.insert('inst_purchases', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
+      } else {
+        await db.update('inst_purchases', values, where: 'id = ?', whereArgs: [localId]);
+      }
     }
   }
 
@@ -402,6 +613,11 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       'purchaseDate': _i(d['purchaseDate']),
       'updatedAt': _i(d['updatedAt']),
     };
+    final purSid = _sn(d['purchaseServerId']);
+    if (hasPurchases && purSid != null) {
+      final purId = await _localIdBySid(db, 'inst_purchases', purSid);
+      if (purId != null) values['purchaseId'] = purId;
+    }
     if (localId == null) {
       await db.insert('inst_items', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
     } else {
@@ -493,6 +709,111 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       await db.update('inst_payments', values, where: 'id = ?', whereArgs: [localId]);
     }
   }
+  // ---- naqd sale (item upar aa chuka; cash IN row POS sync se: cashServerId se jodo)
+  final saleDocs = of('inst_cash_sales');
+  if (saleDocs.isNotEmpty &&
+      (await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_cash_sales'")).isNotEmpty) {
+    for (final d in saleDocs) {
+      final sid = _sn(d['serverId']);
+      if (sid == null || await pending(instCashSaleType, sid)) continue;
+      final localId = await _localIdBySid(db, 'inst_cash_sales', sid);
+      if (d['_deleted'] == true) {
+        if (localId != null) await db.delete('inst_cash_sales', where: 'id = ?', whereArgs: [localId]);
+        continue;
+      }
+      final iid = await _localIdBySid(db, 'inst_items', _s(d['itemServerId']));
+      if (iid == null) continue;
+      final cashSid = _sn(d['cashServerId']);
+      final cashId = cashSid == null ? null : await _localIdBySid(db, 'cash_transactions', cashSid);
+      final cusSid = _sn(d['customerServerId']);
+      final values = <String, Object?>{
+        'itemId': iid,
+        'customerId': cusSid == null ? null : await _localIdBySid(db, 'customers', cusSid),
+        for (final k in const ['saleNo', 'customerName', 'phone', 'note', 'soldBy']) k: _s(d[k]),
+        'method': _s(d['method']) == 'bank' ? 'bank' : 'cash',
+        'price': _d(d['price']),
+        'costPrice': _d(d['costPrice']),
+        'soldAt': _i(d['soldAt']),
+        'cashTxId': cashId,
+        'updatedAt': _i(d['updatedAt']),
+      };
+      if (localId == null) {
+        await db.insert('inst_cash_sales', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
+      } else {
+        await db.update('inst_cash_sales', values, where: 'id = ?', whereArgs: [localId]);
+      }
+    }
+  }
+
+  // ---- supplier ko wapsi (item + bill upar aa chuke)
+  final retDocs = of('inst_purchase_returns');
+  if (retDocs.isNotEmpty &&
+      (await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_purchase_returns'")).isNotEmpty) {
+    for (final d in retDocs) {
+      final sid = _sn(d['serverId']);
+      if (sid == null || await pending(instPurchaseReturnType, sid)) continue;
+      final localId = await _localIdBySid(db, 'inst_purchase_returns', sid);
+      if (d['_deleted'] == true) {
+        if (localId != null) await db.delete('inst_purchase_returns', where: 'id = ?', whereArgs: [localId]);
+        continue;
+      }
+      final supId = await _localIdBySid(db, 'inst_suppliers', _s(d['supplierServerId']));
+      final iid = await _localIdBySid(db, 'inst_items', _s(d['itemServerId']));
+      if (supId == null || iid == null) continue;
+      final purSid = _sn(d['purchaseServerId']);
+      final values = <String, Object?>{
+        'supplierId': supId,
+        'purchaseId': purSid == null ? null : await _localIdBySid(db, 'inst_purchases', purSid),
+        'itemId': iid,
+        'amount': _d(d['amount']),
+        'note': _s(d['note']),
+        'returnedBy': _s(d['returnedBy']),
+        'returnedAt': _i(d['returnedAt']),
+        'updatedAt': _i(d['updatedAt']),
+      };
+      if (localId == null) {
+        await db.insert('inst_purchase_returns', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
+      } else {
+        await db.update('inst_purchase_returns', values, where: 'id = ?', whereArgs: [localId]);
+      }
+    }
+  }
+
+  // ---- supplier ko adaigi (cash OUT row POS sync se: cashServerId se jodo)
+  if (hasPurchases) {
+    for (final d in of('inst_supplier_payments')) {
+      final sid = _sn(d['serverId']);
+      if (sid == null || await pending(instSupplierPaymentType, sid)) continue;
+      final localId = await _localIdBySid(db, 'inst_supplier_payments', sid);
+      if (d['_deleted'] == true) {
+        if (localId != null) await db.delete('inst_supplier_payments', where: 'id = ?', whereArgs: [localId]);
+        continue;
+      }
+      final supId = await _localIdBySid(db, 'inst_suppliers', _s(d['supplierServerId']));
+      if (supId == null) continue;
+      final purSid = _sn(d['purchaseServerId']);
+      final purId = purSid == null ? null : await _localIdBySid(db, 'inst_purchases', purSid);
+      final cashSid = _sn(d['cashServerId']);
+      final cashId = cashSid == null ? null : await _localIdBySid(db, 'cash_transactions', cashSid);
+      final values = <String, Object?>{
+        'supplierId': supId,
+        'purchaseId': purId,
+        'amount': _d(d['amount']),
+        'method': _s(d['method']) == 'bank' ? 'bank' : 'cash',
+        'note': _s(d['note']),
+        'paidBy': _s(d['paidBy']),
+        'paidAt': _i(d['paidAt']),
+        'cashTxId': cashId,
+        'updatedAt': _i(d['updatedAt']),
+      };
+      if (localId == null) {
+        await db.insert('inst_supplier_payments', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
+      } else {
+        await db.update('inst_supplier_payments', values, where: 'id = ?', whereArgs: [localId]);
+      }
+    }
+  }
+
   // ---- rate tabdeeli ka record (sirf tareekh; item ki nayi qeemat item doc se aati hai)
   final priceDocs = of('inst_price_changes');
   if (priceDocs.isNotEmpty &&

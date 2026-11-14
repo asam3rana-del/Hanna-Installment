@@ -10,6 +10,8 @@ import '../services/party_photo_store.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
+import 'inst_cash_sale_repository.dart';
+import 'inst_cash_sale_screens.dart';
 import 'inst_models.dart';
 import 'inst_photo_widgets.dart';
 import 'inst_plans_screen.dart';
@@ -356,6 +358,7 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
   CustomerProfile? _p;
   List<Guarantor> _g = const [];
   List<PlanView> _plans = const [];
+  List<CashSaleView> _cashBuys = const [];
   bool _loaded = false;
 
   @override
@@ -381,6 +384,7 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
     final p = await repo.profile(widget.customerId);
     final g = await repo.guarantors(widget.customerId);
     final plans = await InstPlanRepository.instance.list(customerId: widget.customerId);
+    final cashBuys = await InstCashSaleRepository.instance.list(customerId: widget.customerId);
     await KycPhotoStore.instance.ensureLoaded();
     if (!mounted) return;
     setState(() {
@@ -388,6 +392,7 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
       _p = p;
       _g = g;
       _plans = plans;
+      _cashBuys = cashBuys;
       _loaded = true;
     });
   }
@@ -483,6 +488,25 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                           await _reload();
                         },
                       ),
+                      if (_cashBuys.isNotEmpty) ...[
+                        instSectionTitle(p, Loc.t('CASH PURCHASES', 'نقد خریداری')),
+                        for (final v in _cashBuys)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: instCard(p),
+                            child: ListTile(
+                              onTap: () async {
+                                await Navigator.of(context)
+                                    .push(MaterialPageRoute(builder: (_) => InstCashSaleDetailScreen(saleId: v.sale.id)));
+                                await _reload();
+                              },
+                              leading: Icon(Icons.payments_outlined, color: p.teal),
+                              title: Text(v.itemTitle, style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+                              subtitle: Text(v.sale.saleNo, style: TextStyle(color: p.textMuted, fontSize: 12)),
+                              trailing: Text(instRs(v.sale.price), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                      ],
                       instSectionTitle(p, Loc.t('DOCUMENTS', 'کاغذات')),
                       KycPhotoRow(owner: 'c', id: c.id!, kinds: const [
                         KycPhotoStore.cnicFront,

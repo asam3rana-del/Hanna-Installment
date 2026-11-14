@@ -11,11 +11,14 @@ import '../services/crash_reporter.dart';
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
+import 'inst_cash_sale_screens.dart';
 import 'inst_collection_screens.dart';
 import 'inst_customers_screen.dart';
 import 'inst_items_screen.dart';
 import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
+import 'inst_purchase_screens.dart';
+import 'inst_report_screens.dart';
 import 'inst_repository.dart';
 import 'inst_shop_tools_screen.dart';
 import '../license/license_screen.dart';
@@ -145,17 +148,22 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
           () => _push(const NewInstallmentScreen())),
       _Tile(Icons.request_quote_outlined, Loc.t('Installments', 'قسطیں'), Loc.t('${_col.activePlans} active plans', '${_col.activePlans} جاری پلان'), p.navy,
           () => _push(const InstPlansScreen())),
+      _Tile(Icons.point_of_sale, Loc.t('Cash Sale', 'نقد سیل'), Loc.t('Sell without installments', 'بغیر قسط بیچیں'), p.tealDark,
+          () => _push(const InstCashSalesScreen())),
       _Tile(Icons.format_list_numbered, Loc.t('Collection List', 'وصولی لسٹ'), Loc.t('Who to collect from', 'کس سے کتنا لینا ہے'), p.blue,
           () => _push(const InstCollectionListScreen())),
       _Tile(Icons.report_gmailerrorred_outlined, Loc.t('Defaulters', 'ڈیفالٹرز'), Loc.t('Late + guarantor phones', 'لیٹ + ضامن کے فون'), p.red,
           () => _push(const InstDefaultersScreen())),
       if (Session.isAdminOrManager)
-        _Tile(Icons.insights_outlined, Loc.t('Reports', 'رپورٹس'), Loc.t('Collection, profit, aging', 'وصولی، منافع، باقی'), p.navyLight,
-            () => _push(const InstReportsScreen())),
+        _Tile(Icons.insights_outlined, Loc.t('Reports', 'رپورٹس'), Loc.t('Profit, sale, stock, dues', 'منافع، سیل، اسٹاک، قسطیں'), p.navyLight,
+            () => _push(const InstReportsHubScreen())),
       _Tile(Icons.people_alt_outlined, Loc.t('Customers', 'کسٹمرز'), Loc.t('CNIC, guarantors', 'شناختی کارڈ، ضامن'), p.purple,
           () => _push(const InstCustomersScreen())),
       _Tile(Icons.inventory_2_outlined, Loc.t('Stock', 'اسٹاک'), Loc.t('Mobiles, bikes, LCDs...', 'موبائل، بائیک، ایل سی ڈی'), p.blue,
           () => _push(const InstItemsScreen())),
+      if (Session.isAdminOrManager)
+        _Tile(Icons.local_shipping_outlined, Loc.t('Purchases', 'خریداری'), Loc.t('Bills, suppliers, payable', 'بل، سپلائر، ادھار'), p.tealDark,
+            () => _push(const InstPurchasesScreen())),
       _Tile(Icons.category_outlined, Loc.t('Categories', 'کیٹیگریز'), Loc.t('IMEI / serial fields', 'IMEI / سیریل فیلڈز'), p.amber,
           () => _push(const InstCategoriesScreen())),
       _Tile(Icons.storefront_outlined, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, backup', 'کیش، خرچے، اسٹاف، بیک اپ'), p.orange,

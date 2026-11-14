@@ -26,6 +26,7 @@ export const SYNC_COLLECTIONS: Record<string, string> = {
   inst_profile: "inst_customer_profiles", inst_guarantor: "inst_guarantors", inst_category: "inst_categories",
   inst_item: "inst_items", inst_plan: "inst_plans", inst_payment: "inst_payments", inst_photo: "inst_photos",
   inst_price_change: "inst_price_changes", // sirf admin / manager (cashier list mein nahi)
+  inst_cash_sale: "inst_cash_sales", inst_purchase_return: "inst_purchase_returns", inst_supplier: "inst_suppliers", inst_purchase: "inst_purchases", inst_supplier_payment: "inst_supplier_payments", // khareed: sirf admin / manager
 };
 
 export const OPERATIONS = ["upsert", "delete", "create_if_absent", "increment_stock", "increment_balance", "set_stock"];
@@ -45,7 +46,7 @@ const CASHIER_UPSERT = new Set([
   "customer", "sale", "payment", "expense", "cash_transaction", "return", "stock_movement",
   "shell_customer", "shell_transaction", "shop_empty_shell_log", "due_followup",
   // Hanna Installment: cashier qist leta hai, plan / customer / zamin banata hai, bika saman "sold" karta hai.
-  "inst_profile", "inst_guarantor", "inst_item", "inst_plan", "inst_payment", "inst_photo",
+  "inst_profile", "inst_guarantor", "inst_item", "inst_plan", "inst_payment", "inst_photo", "inst_cash_sale",
 ]);
 export function roleMayDo(role: StaffRole, type: string, op: string): boolean {
   if (!(type in SYNC_COLLECTIONS) || !OPERATIONS.includes(op)) return false;

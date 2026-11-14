@@ -107,6 +107,24 @@ void main() {
     expect(r.netProfit, -9896.77);
   });
 
+  test('profit report: cash sales add their profit; no-cost sales counted apart', () {
+    final nov = DateTime(2026, 11, 5).millisecondsSinceEpoch;
+    final oct = DateTime(2026, 10, 5).millisecondsSinceEpoch;
+    final (from, to) = monthRange(DateTime(2026, 11, 1));
+    final r = profitReport(
+      payments: const [],
+      expenses: const [],
+      from: from,
+      to: to,
+      cashSales: [(nov, 47000.0, 40000.0), (nov, 10000.0, 0.0), (oct, 99999.0, 1.0)],
+    );
+    expect(r.cashSales, 57000);
+    expect(r.cashSaleProfit, 7000);
+    expect(r.collectedWithoutCost, 10000);
+    expect(r.grossProfit, 7000);
+    expect(r.netProfit, 7000);
+  });
+
   test('rate change: set / add / percent, rounding, never negative', () {
     expect(applyRateChange(52000, RateChangeMode.setTo, 54000), 54000);
     expect(applyRateChange(52000, RateChangeMode.addAmount, -1500), 50500);

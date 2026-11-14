@@ -31,6 +31,11 @@
   </div>
   <div class="card">
     <label>Private key (hanna-license-private.key ki 64-harf wali line)</label>
+    <label style="display:block;margin:0 0 8px;padding:12px;border:1px dashed #889;border-radius:10px;text-align:center;font-weight:600;cursor:pointer">
+      Key file chunein (hanna-license-private.key)
+      <input id="privFile" type="file" style="display:none">
+    </label>
+    <div style="font-size:12px;color:#667;margin-bottom:6px">Ya 64-harf wali line neeche paste karein:</div>
     <textarea id="priv" rows="2" autocomplete="off" spellcheck="false" placeholder="e.g. 3f9a..."></textarea>
     <div id="pubinfo" style="font-size:12px;color:#667;margin-top:6px"></div>
   </div>
@@ -188,6 +193,20 @@ if (typeof document !== "undefined") {
   $("copy").onclick = () => navigator.clipboard.writeText($("out").value);
   $("copyRec").onclick = () => navigator.clipboard.writeText(lastRec);
 }
+
+document.getElementById('privFile').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const m = String(r.result).match(/\b[0-9a-fA-F]{64}\b/);
+    const box = document.getElementById('priv');
+    if (!m) { alert('Is file mein 64-harf wali key nahi mili'); return; }
+    box.value = m[0].toLowerCase();
+    box.dispatchEvent(new Event('input', {bubbles:true}));
+    e.target.value = '';
+  };
+  r.readAsText(f);
+});
 </script>
 </body>
 </html>

@@ -425,6 +425,24 @@ class InstRepository {
     return StockValue(((m['n'] as num?) ?? 0).toInt(), ((m['cost'] as num?) ?? 0).toDouble(), ((m['cash'] as num?) ?? 0).toDouble());
   }
 
+  /// App ke `cash_transactions` ke hisaab se haath mein (cash) aur bank: sab IN − sab OUT (shuru ka cash Cash screen se "Cash In").
+  Future<(double, double)> cashBalances() async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.rawQuery(
+        "SELECT method, COALESCE(SUM(CASE WHEN type = 'IN' THEN amount WHEN type = 'OUT' THEN -amount ELSE 0 END), 0) AS v "
+        'FROM cash_transactions GROUP BY method');
+    var cash = 0.0, bank = 0.0;
+    for (final r in rows) {
+      final v = ((r['v'] as num?) ?? 0).toDouble();
+      if ((r['method'] as String?) == 'bank') {
+        bank += v;
+      } else {
+        cash += v;
+      }
+    }
+    return (cash, bank);
+  }
+
   // ================================================================ home stats
 
   Future<InstHomeStats> homeStats() async {

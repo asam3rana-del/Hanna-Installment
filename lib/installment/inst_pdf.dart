@@ -384,6 +384,97 @@ class InstPdf {
     return bytes;
   }
 
+  // ================================================================ report table (Step 14)
+
+  /// Kisi bhi report ki A4 jadwal PDF: upar dukaan + unwan, phir khulasa (label: value), phir jadwal.
+  /// [flex] = har column ki chaurai (na do to barabar); [right] = jo columns daen taraf (raqam).
+  static Future<Uint8List> tableBytes({
+    required String title,
+    required String sub,
+    List<(String, String)> summary = const [],
+    required List<String> headers,
+    required List<List<String>> rows,
+    List<int>? flex,
+    Set<int> right = const {},
+  }) =>
+      _safe(() => _table(title, sub, summary, headers, rows, flex, right));
+
+  static Future<Uint8List> _table(String title, String sub, List<(String, String)> summary, List<String> headers,
+      List<List<String>> rows, List<int>? flex, Set<int> right) async {
+    await _assets();
+    final shop = await loadShopHeader();
+    final fl = flex != null && flex.length == headers.length ? flex : List<int>.filled(headers.length, 1);
+    pw.Widget cell(String t, int i, {bool head = false}) => pw.Expanded(
+          flex: fl[i],
+          child: pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+            child: pw.Align(
+              alignment: right.contains(i) ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+              child: _t(t, size: 8.5, bold: head, argb: head ? 0xFFFFFFFF : 0xFF2E3242),
+            ),
+          ),
+        );
+    List<pw.Widget> build() => [
+          _header(shop, title, sub),
+          pw.SizedBox(height: 8),
+          for (final s in summary) _kv(s.$1, s.$2, bold: true),
+          if (summary.isNotEmpty) pw.SizedBox(height: 8),
+          pw.Container(
+            color: _navy,
+            child: pw.Row(children: [for (var i = 0; i < headers.length; i++) cell(headers[i], i, head: true)]),
+          ),
+          for (var r = 0; r < rows.length; r++)
+            pw.Container(
+              decoration: pw.BoxDecoration(
+                color: r.isOdd ? const PdfColor.fromInt(0xFFF5F6FA) : PdfColors.white,
+                border: const pw.Border(bottom: pw.BorderSide(color: _line, width: 0.5)),
+              ),
+              child: pw.Row(children: [
+                for (var i = 0; i < headers.length; i++) cell(i < rows[r].length ? rows[r][i] : '', i),
+              ]),
+            ),
+          if (rows.isEmpty) pw.Padding(padding: const pw.EdgeInsets.all(12), child: _t('—', argb: 0xFF8A90A6)),
+        ];
+    final doc = _doc();
+    build(); // pass 1: Urdu text yaad
+    await UrduPdf.flush();
+    final widgets = build();
+    doc.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(26, 26, 26, 26),
+      maxPages: 60,
+      build: (_) => widgets,
+      footer: (ctx) => pw.Align(
+        alignment: pw.Alignment.centerRight,
+        child: pw.Text('${_d(DateTime.now().millisecondsSinceEpoch)}  •  ${ctx.pageNumber}/${ctx.pagesCount}',
+            style: const pw.TextStyle(fontSize: 8, color: _gray)),
+      ),
+    ));
+    final bytes = await doc.save();
+    UrduPdf.clearCache();
+    return bytes;
+  }
+
+  /// Report PDF bana kar share sheet (WhatsApp / print / save).
+  static Future<void> shareTable(
+    BuildContext context, {
+    required String base,
+    required String title,
+    required String sub,
+    List<(String, String)> summary = const [],
+    required List<String> headers,
+    required List<List<String>> rows,
+    List<int>? flex,
+    Set<int> right = const {},
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(SnackBar(content: Text(Loc.t('Making PDF...', 'PDF بن رہی ہے...'))));
+    final bytes = await tableBytes(title: title, sub: sub, summary: summary, headers: headers, rows: rows, flex: flex, right: right);
+    if (!context.mounted) return;
+    messenger.hideCurrentSnackBar();
+    await send(context, bytes: bytes, base: base, phone: '');
+  }
+
   // ================================================================ files / share
 
   static Future<File> _write(Uint8List bytes, String base) async {

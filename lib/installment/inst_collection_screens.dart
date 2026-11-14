@@ -12,6 +12,7 @@ import 'inst_photo_widgets.dart';
 import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
+import 'inst_purchase_repository.dart';
 import 'inst_reports.dart';
 import 'inst_repository.dart';
 import 'inst_ui.dart';
@@ -389,6 +390,7 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
   ProfitReport? _profit;
   StockValue _stock = const StockValue(0, 0, 0);
   (int, double, double) _rates = (0, 0.0, 0.0);
+  PurchaseSummary _buy = const PurchaseSummary();
   bool _loading = true;
 
   @override
@@ -441,12 +443,14 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
     final profit = await repo.profit(from: _from, to: _to);
     final sv = await InstRepository.instance.stockValue();
     final rates = await InstRepository.instance.priceChangeSummary(from: _from, to: _to);
+    final buy = await InstPurchaseRepository.instance.summary(from: _from, to: _to);
     if (!mounted) return;
     setState(() {
       _r = r;
       _profit = profit;
       _stock = sv;
       _rates = rates;
+      _buy = buy;
       _active = active.length;
       _aging = agingOf(active.map((v) => v.status), today);
       _inStock = stock.where((i) => i.status == itemInStock).length;
@@ -557,6 +561,17 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
                         _line(p, Loc.t('Cost value change', 'لاگت میں فرق'), _signedRs(_rates.$3), c: _rates.$3 <= 0 ? p.teal : p.red),
                     ],
                   ]),
+                  if (showMoney) ...[
+                    instSectionTitle(p, Loc.t('PURCHASES', 'خریداری')),
+                    _card(p, [
+                      _line(p, Loc.t('Bills in period', 'اس دوران بل'), '${_buy.bills}  (${_buy.pieces} ${Loc.t('pcs', 'پیس')})'),
+                      _line(p, Loc.t('Bought (cost)', 'خریداری (لاگت)'), instRs(_buy.total)),
+                      _line(p, Loc.t('Paid to suppliers', 'سپلائرز کو ادا'), instRs(_buy.paid), c: p.teal),
+                      const Divider(),
+                      _line(p, Loc.t('To pay suppliers now', 'ابھی سپلائرز کو دینا'), instRs(_buy.payable),
+                          c: _buy.payable > 0.5 ? p.red : p.teal),
+                    ]),
+                  ],
                 ]),
         ),
       ]),
@@ -571,6 +586,9 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
       _big(p, Loc.t('Net profit', 'خالص منافع'), _signedRs(pr.netProfit), pr.netProfit >= 0 ? p.teal : p.red),
       _line(p, Loc.t('Profit in collections', 'وصولی میں منافع'), instRs(pr.realizedProfit), c: pr.realizedProfit >= 0 ? p.teal : p.red),
       _line(p, Loc.t('Late fines', 'لیٹ جرمانہ'), instRs(pr.fines)),
+      if (pr.cashSales > 0.5)
+        _line(p, '${Loc.t('Cash sale profit', 'نقد سیل منافع')} (${instRs(pr.cashSales)})', instRs(pr.cashSaleProfit),
+            c: pr.cashSaleProfit >= 0 ? p.teal : p.red),
       _line(p, Loc.t('Gross profit', 'کل منافع'), instRs(pr.grossProfit)),
       const Divider(),
       for (final e in ex) _line(p, e.key, '- ${instRs(e.value)}', c: p.red),

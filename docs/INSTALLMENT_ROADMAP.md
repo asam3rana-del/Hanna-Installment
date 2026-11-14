@@ -119,5 +119,47 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
   Python / JS / Node crypto se bit-by-bit milaye gaye
 - build.yml: Android + Windows `--obfuscate --split-debug-info` (symbols artifact). `.gitignore`: *.key, licenses.csv
 
+## App icon — done
+- `branding/`: Hanna logo (Android adaptive + legacy, iOS 1024, Windows .ico, Play 512, PDF logo `assets/images/logo.png`).
+  Android: `tools/android_fix.sh` copy karta hai; iOS / Windows: build.yml ke "Set ... app icon" steps
+
+## Step 11 — done (DB v41): Khareed (Purchase)
+- Home > Khareed (admin/manager): bill list (is mahine ki khareed, suppliers ko kul dena), naya bill = supplier + bill no. +
+  tareekh + kai pieces (har piece stock mein, IMEI duplicate check, "ek aur aisa" copy) + abhi di gayi raqam (cash / bank)
+- Bill detail: pieces (tap = item form), adaigiyan, Pay, edit (no. / tareekh / note), delete (sirf jab saare pieces stock mein)
+- Suppliers: list + baqi, khata (purana baqi, bill +, adaigi −, running balance), Pay, naya bill; adaigi long-press = wapas
+- Har adaigi = `cash_transactions` OUT (`inst-supp:<id>`). Bill total = pieces ki khareed qeemat (baad ka rate badalna bill nahi badalta)
+- Tables: `inst_suppliers`, `inst_purchases`, `inst_supplier_payments`, `inst_items.purchaseId`. Sync: 3 nayi collections
+  (rules / indexes / functions updated — har dukaan ke Firebase par rules + indexes dobara deploy). Reports > Khareed
+- Tests: installment_purchase_test (khata), installment_sync_test (A -> B purchase), migration v41
+
+## Step 12 — done (DB change nahi): Reports hub
+- Home > Reports ab hub (`inst_report_screens.dart`): Karobar ki surat (customers se lena / is mein late / 7 din ki qisten /
+  stock lagat par / suppliers ko dena / khalis) + 8 reports: Munafa & Wasooli (purani), Sale, Stock, Aane wali qisten,
+  Late (Defaulters 1+ din), Lena (customer wise), Dena (suppliers), Khareed. Har nayi report WhatsApp / share text
+- Sale: muddat ke plan, nakd / qist maliyat, advance, khareed, mutawaqqa munafa (khareed na ho to alag ginti), category wise
+- Stock: category wise, kitna purana (0-30 / 31-90 / 91-180 / 180+ din), purane pehle list
+- Qisten: aaj / 7 din / is mahine / agle mahine / tareekhen, purani late bhi (switch), din wise jor
+- Lena: customer wise baqi, late raqam + din, agli qist; sirf late ka filter
+- Hisaab PURE `inst_ledger_reports.dart` (test/installment_ledger_reports_test.dart)
+
+## Step 13 — done (DB v42): Naqd (cash) sale
+- Home > Naqd Sale (sab users): stock se piece dhoondo (model / IMEI), qeemat (naqd qeemat pehle se), cash / bank,
+  customer ka naam / phone (ikhtiyari) -> piece `sold`, `cash_transactions` IN (`inst-sale:<id>`), number `N-<tag><id>`.
+  Raseed WhatsApp / share. Admin / Manager "wapas": piece dobara stock, cash row hat'ti hai.
+  Item form: stock piece par "Naqd bechein"; bike piece par "Plan / sale dekhein"
+- `inst_cash_sales` (bechte waqt ki khareed qeemat ke saath). Sync `inst_cash_sale` (cashier bhi; rules / indexes / functions)
+- Munafa: naqd sale ka munafa (qeemat − khareed) gross profit mein; Sale Report: qist + naqd ek saath (alag ginti)
+- Tests: profit (cash sales), ledger (cashSaleRows), sync (A -> B), migration v42
+
+## Step 14 — done (DB v43)
+- Supplier ko wapsi: bill > "Wapas karein" (stock wale pieces chunein) -> piece `returned`, supplier ka baqi kam
+  (`inst_purchase_returns`, raqam = khareed). Bill / khata mein wapsi; "wapsi khatam" = piece dobara stock. Sync `inst_purchase_return`
+- Purane bill mein piece: bill > "Piece shamil karein" (bill ki raqam barhti hai)
+- Reports ki PDF (`InstPdf.shareTable`, A4 jadwal, Urdu): Sale, Stock, Aane wali qisten, Lena, Supplier khata
+- Naqd sale ka customer: customer list se chunein (`inst_cash_sales.customerId`, sync `customerServerId`);
+  customer ke page par "Naqd khareedari"
+- Karobar ki surat: haath mein cash + bank (cash_transactions IN − OUT) bhi; khalis = lena + stock + cash + bank − dena
+
 ## Abhi baqi
-- Installment ka alag icon + feature graphic
+- Feature graphic (Play Store)

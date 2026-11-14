@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
+import 'inst_cash_sale_repository.dart';
+import 'inst_cash_sale_screens.dart';
 import 'inst_models.dart';
 import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
@@ -225,21 +227,28 @@ class InstItemFormScreen extends StatefulWidget {
   final List<InstCategory> categories;
   final InstItem? existing;
   final int? initialCategoryId;
-  const InstItemFormScreen({super.key, required this.categories, this.existing, this.initialCategoryId});
+
+  /// Khareed ke bill ka piece: save nahi hota, bana hua [InstItem] `Navigator.pop` se wapas (bill saath save karta hai).
+  final bool draft;
+
+  /// Draft mein pichle piece ki copy (model / qeemat wahi, pehchan number khali).
+  final InstItem? template;
+  const InstItemFormScreen(
+      {super.key, required this.categories, this.existing, this.initialCategoryId, this.draft = false, this.template});
 
   @override
   State<InstItemFormScreen> createState() => _InstItemFormScreenState();
 }
 
 class _InstItemFormScreenState extends State<InstItemFormScreen> {
-  late int _catId = widget.existing?.categoryId ?? widget.initialCategoryId ?? widget.categories.first.id!;
-  late final _brand = TextEditingController(text: widget.existing?.brand ?? '');
-  late final _model = TextEditingController(text: widget.existing?.model ?? '');
-  late final _color = TextEditingController(text: widget.existing?.color ?? '');
-  late final _cost = TextEditingController(text: _num(widget.existing?.costPrice));
-  late final _cash = TextEditingController(text: _num(widget.existing?.cashPrice));
-  late final _warranty = TextEditingController(
-      text: (widget.existing?.warrantyMonths ?? 0) > 0 ? '${widget.existing!.warrantyMonths}' : '');
+  late final InstItem? _init = widget.existing ?? widget.template;
+  late int _catId = _init?.categoryId ?? widget.initialCategoryId ?? widget.categories.first.id!;
+  late final _brand = TextEditingController(text: _init?.brand ?? '');
+  late final _model = TextEditingController(text: _init?.model ?? '');
+  late final _color = TextEditingController(text: _init?.color ?? '');
+  late final _cost = TextEditingController(text: _num(_init?.costPrice));
+  late final _cash = TextEditingController(text: _num(_init?.cashPrice));
+  late final _warranty = TextEditingController(text: (_init?.warrantyMonths ?? 0) > 0 ? '${_init!.warrantyMonths}' : '');
   late final _supplier = TextEditingController(text: widget.existing?.supplier ?? '');
   late final _note = TextEditingController(text: widget.existing?.note ?? '');
   late int _purchaseDate = widget.existing?.purchaseDate ?? 0;
@@ -259,7 +268,15 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
     if (id == null) return;
     final planId = await InstPlanRepository.instance.planIdForItem(id);
     if (!mounted) return;
-    if (planId == null) return instToast(context, Loc.t('No plan found for this piece.', 'اس پیس کا کوئی پلان نہیں ملا۔'));
+    if (planId == null) {
+      final saleId = await InstCashSaleRepository.instance.saleIdForItem(id);
+      if (!mounted) return;
+      if (saleId != null) {
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => InstCashSaleDetailScreen(saleId: saleId)));
+        return;
+      }
+      return instToast(context, Loc.t('No plan or sale found for this piece.', 'اس پیس کا کوئی پلان یا سیل نہیں ملی۔'));
+    }
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => InstPlanDetailScreen(planId: planId)));
   }
 
@@ -267,7 +284,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
   void initState() {
     super.initState();
     if (!widget.categories.any((c) => c.id == _catId)) _catId = widget.categories.first.id!;
-    for (final e in (widget.existing?.idValues ?? const <String, String>{}).entries) {
+    for (final e in (_init?.idValues ?? const <String, String>{}).entries) {
       _ids[e.key] = TextEditingController(text: e.value);
     }
     final id = widget.existing?.id;
@@ -311,7 +328,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
       model: _model.text,
       color: _color.text,
       idValues: {for (final n in names) n: _idCtrl(n).text},
-      costPrice: Session.isAdminOrManager ? instParse(_cost.text) : (ex?.costPrice ?? 0),
+      costPrice: Session.isAdminOrManager || widget.draft ? instParse(_cost.text) : (ex?.costPrice ?? 0),
       cashPrice: instParse(_cash.text),
       warrantyMonths: int.tryParse(_warranty.text.trim()) ?? 0,
       supplier: _supplier.text,
@@ -320,6 +337,15 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
       purchaseDate: _purchaseDate,
       createdAt: ex?.createdAt ?? 0,
     );
+    if (widget.draft) {
+      setState(() => _saving = false);
+      if (item.model.trim().isEmpty) return instToast(context, Loc.t('Enter the model / name.', 'ماڈل / نام لکھیں۔'));
+      if (instParse(_cost.text) <= 0) {
+        return instToast(context, Loc.t('Enter the purchase cost.', 'خرید قیمت لکھیں۔'));
+      }
+      Navigator.of(context).pop(item);
+      return;
+    }
     try {
       await InstRepository.instance.saveItem(item);
       if (mounted) Navigator.of(context).pop();
@@ -375,10 +401,18 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
         instHeader(
           context,
           p,
-          ex == null ? Loc.t('Add Item', 'سامان شامل کریں') : (ex.title.isEmpty ? ex.model : ex.title),
-          ex == null ? Loc.t('One entry = one piece', 'ایک اندراج = ایک پیس') : instStatusLabel(ex.status),
+          widget.draft
+              ? Loc.t('Piece in bill', 'بل میں پیس')
+              : ex == null
+                  ? Loc.t('Add Item', 'سامان شامل کریں')
+                  : (ex.title.isEmpty ? ex.model : ex.title),
+          widget.draft
+              ? Loc.t('Supplier and date come from the bill', 'سپلائر اور تاریخ بل سے')
+              : ex == null
+                  ? Loc.t('One entry = one piece', 'ایک اندراج = ایک پیس')
+                  : instStatusLabel(ex.status),
           actions: [
-            if (ex != null && ex.inStock)
+            if (ex != null && ex.inStock && !widget.draft)
               IconButton(tooltip: Loc.t('Delete', 'حذف'), icon: const Icon(Icons.delete_outline, color: Colors.white), onPressed: _delete),
           ],
         ),
@@ -398,7 +432,9 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
                   Wrap(spacing: 8, children: [
                     if (widget.existing!.status != itemInStock)
                       OutlinedButton.icon(
-                          onPressed: _openPlan, icon: const Icon(Icons.request_quote_outlined), label: Text(Loc.t('View plan', 'پلان دیکھیں'))),
+                          onPressed: _openPlan,
+                          icon: const Icon(Icons.request_quote_outlined),
+                          label: Text(Loc.t('View plan / sale', 'پلان / سیل دیکھیں'))),
                     if ((widget.existing!.status == itemRepossessed || widget.existing!.status == itemReturned) && Session.isAdminOrManager)
                       OutlinedButton.icon(
                         onPressed: () => setState(() => _status = _status == itemInStock ? widget.existing!.status : itemInStock),
@@ -407,6 +443,19 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
                       ),
                   ]),
                 ]),
+              ),
+            if (ex != null && ex.inStock && !widget.draft && ex.id != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                  onPressed: () async {
+                    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => InstNewCashSaleScreen(itemId: ex.id)));
+                    if (mounted) Navigator.of(context).pop();
+                  },
+                  icon: const Icon(Icons.point_of_sale),
+                  label: Text(Loc.t('Sell for cash', 'نقد بیچیں')),
+                ),
               ),
             instSectionTitle(p, Loc.t('ITEM', 'سامان')),
             DropdownButtonFormField<int>(
@@ -434,7 +483,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
               gap(),
             ],
             instSectionTitle(p, Loc.t('PRICE', 'قیمت')),
-            if (Session.isAdminOrManager) ...[
+            if (Session.isAdminOrManager || widget.draft) ...[
               TextField(
                 controller: _cost,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -466,6 +515,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: instDeco(p, Loc.t('Warranty (months)', 'وارنٹی (مہینے)')),
             ),
+            if (!widget.draft) ...[
             gap(),
             TextField(controller: _supplier, decoration: instDeco(p, Loc.t('Bought from (supplier)', 'کہاں سے خریدا (سپلائر)'))),
             gap(),
@@ -480,6 +530,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
                 ),
               ),
             ),
+            ],
             gap(),
             TextField(controller: _note, maxLines: 2, decoration: instDeco(p, Loc.t('Note', 'نوٹ'))),
             if (_history.isNotEmpty) ...[
@@ -514,7 +565,12 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
               ),
             ],
             const SizedBox(height: 20),
-            instPrimaryButton(p, _saving ? Loc.t('Saving...', 'محفوظ ہو رہا ہے...') : Loc.t('Save', 'محفوظ کریں'), _saving ? null : _save),
+            instPrimaryButton(
+                p,
+                widget.draft
+                    ? Loc.t('Add to bill', 'بل میں شامل کریں')
+                    : (_saving ? Loc.t('Saving...', 'محفوظ ہو رہا ہے...') : Loc.t('Save', 'محفوظ کریں')),
+                _saving ? null : _save),
           ]),
         ),
       ]),

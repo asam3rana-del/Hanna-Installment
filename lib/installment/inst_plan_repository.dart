@@ -563,7 +563,13 @@ class InstPlanRepository {
       for (final r in await db.rawQuery('SELECT createdAt, category, amount FROM expenses WHERE createdAt >= ? AND createdAt < ?', [from, to]))
         ((r['createdAt'] as num).toInt(), (r['category'] as String?) ?? '', ((r['amount'] as num?) ?? 0).toDouble())
     ];
-    return profitReport(payments: pays, expenses: ex, from: from, to: to);
+    final cs = (await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_cash_sales'")).isEmpty
+        ? const <(int, double, double)>[]
+        : [
+            for (final r in await db.rawQuery('SELECT soldAt, price, costPrice FROM inst_cash_sales WHERE soldAt >= ? AND soldAt < ?', [from, to]))
+              ((r['soldAt'] as num).toInt(), ((r['price'] as num?) ?? 0).toDouble(), ((r['costPrice'] as num?) ?? 0).toDouble())
+          ];
+    return profitReport(payments: pays, expenses: ex, from: from, to: to, cashSales: cs);
   }
 
   // ================================================================ home

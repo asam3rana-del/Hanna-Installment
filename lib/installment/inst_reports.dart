@@ -224,27 +224,43 @@ class ProfitReport {
 
   /// Kharche: category -> raqam.
   final Map<String, double> expenses;
+
+  /// Naqd sale (Step 13): kitni sale aur us ka munafa (sale − khareed; khareed na ho to [collectedWithoutCost] mein).
+  final double cashSales;
+  final double cashSaleProfit;
   const ProfitReport({
     required this.collectedWithCost,
     required this.collectedWithoutCost,
     required this.realizedProfit,
     required this.fines,
     required this.expenses,
+    this.cashSales = 0,
+    this.cashSaleProfit = 0,
   });
 
   double get expenseTotal => _r2(expenses.values.fold<double>(0, (a, b) => a + b));
-  double get grossProfit => _r2(realizedProfit + fines);
+  double get grossProfit => _r2(realizedProfit + fines + cashSaleProfit);
   double get netProfit => _r2(grossProfit - expenseTotal);
 }
 
-/// [from] shamil, [to] nahi. [expenses] = (createdAt, category, amount).
+/// [from] shamil, [to] nahi. [expenses] = (createdAt, category, amount). [cashSales] = (soldAt, price, costPrice).
 ProfitReport profitReport({
   required List<ProfitPayRow> payments,
   required List<(int, String, double)> expenses,
   required int from,
   required int to,
+  List<(int, double, double)> cashSales = const [],
 }) {
-  double withCost = 0, without = 0, profit = 0, fines = 0;
+  double withCost = 0, without = 0, profit = 0, fines = 0, cashTotal = 0, cashProfit = 0;
+  for (final (at, price, cost) in cashSales) {
+    if (at < from || at >= to) continue;
+    cashTotal += price;
+    if (cost <= 0) {
+      without += price;
+    } else {
+      cashProfit += price - cost;
+    }
+  }
   for (final p in payments) {
     if (p.paidAt < from || p.paidAt >= to) continue;
     fines += p.fine;
@@ -267,6 +283,8 @@ ProfitReport profitReport({
     realizedProfit: _r2(profit),
     fines: _r2(fines),
     expenses: ex,
+    cashSales: _r2(cashTotal),
+    cashSaleProfit: _r2(cashProfit),
   );
 }
 
