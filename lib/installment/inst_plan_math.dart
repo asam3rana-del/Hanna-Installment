@@ -26,6 +26,9 @@ const planCancelled = 'cancelled';
 const payAdvance = 'advance';
 const payInstallment = 'installment';
 
+/// Poori adaigi par chhoot (Step 16): qist mein ginti hoti hai (baqi kam), magar paisa nahi aata (cash row nahi).
+const payDiscount = 'discount';
+
 double _r2(double v) => (v * 100).roundToDouble() / 100;
 
 int dayStart(DateTime d) => DateTime(d.year, d.month, d.day).millisecondsSinceEpoch;
@@ -294,7 +297,9 @@ String receiptText({
     ..writeln('Customer: $customerName')
     ..writeln('Item: $itemTitle')
     ..writeln('Date: ${d(paidAt)}')
-    ..writeln('${kind == payAdvance ? 'Advance' : 'Qist'} received: ${rs(amount)} (${method == 'bank' ? 'Bank' : 'Cash'})');
+    ..writeln(kind == payDiscount
+        ? 'Discount: ${rs(amount)}'
+        : '${kind == payAdvance ? 'Advance' : 'Qist'} received: ${rs(amount)} (${method == 'bank' ? 'Bank' : 'Cash'})');
   if (fine > 0) b.writeln('Late fine: ${rs(fine)}');
   b.writeln('Remaining: ${rs(remaining)}');
   if (nextDue != null && remaining > 0.5) b.writeln('Next qist: ${rs(nextAmount)} on ${d(nextDue)}');

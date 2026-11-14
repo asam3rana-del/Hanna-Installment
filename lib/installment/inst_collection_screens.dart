@@ -511,6 +511,8 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
                     _line(p, Loc.t('Installments', 'قسطیں'), instRs(r.collectedInstallments)),
                     _line(p, Loc.t('Advance', 'ایڈوانس'), instRs(r.collectedAdvance)),
                     _line(p, Loc.t('Late fines', 'لیٹ جرمانہ'), instRs(r.collectedFines)),
+                    if (r.discounts > 0.5)
+                      _line(p, Loc.t('Discount given (no cash)', 'رعایت دی (کیش نہیں)'), instRs(r.discounts), c: p.red),
                     const Divider(),
                     _line(p, Loc.t('Cash', 'کیش'), instRs(r.cashIn)),
                     _line(p, Loc.t('Bank', 'بینک'), instRs(r.bankIn)),
@@ -586,6 +588,8 @@ class _InstReportsScreenState extends State<InstReportsScreen> {
       _big(p, Loc.t('Net profit', 'خالص منافع'), _signedRs(pr.netProfit), pr.netProfit >= 0 ? p.teal : p.red),
       _line(p, Loc.t('Profit in collections', 'وصولی میں منافع'), instRs(pr.realizedProfit), c: pr.realizedProfit >= 0 ? p.teal : p.red),
       _line(p, Loc.t('Late fines', 'لیٹ جرمانہ'), instRs(pr.fines)),
+      if (pr.discounts > 0.5)
+        _line(p, Loc.t('Discount given (already taken out of profit)', 'رعایت دی (منافع سے کٹ چکی)'), '− ${instRs(pr.discounts)}', c: p.red),
       if (pr.cashSales > 0.5)
         _line(p, '${Loc.t('Cash sale profit', 'نقد سیل منافع')} (${instRs(pr.cashSales)})', instRs(pr.cashSaleProfit),
             c: pr.cashSaleProfit >= 0 ? p.teal : p.red),

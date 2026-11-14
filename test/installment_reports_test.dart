@@ -107,6 +107,39 @@ void main() {
     expect(r.netProfit, -9896.77);
   });
 
+  test('discount on full settlement: lowers profit by discount x cost share, not counted as collection', () {
+    final nov = DateTime(2026, 11, 5).millisecondsSinceEpoch;
+    final (from, to) = monthRange(DateTime(2026, 11, 1));
+    // Qist qeemat 60000, khareed 40000 (munafa 1/3). Wasooli 50000 + chhoot 10000.
+    final r = profitReport(
+      payments: [
+        ProfitPayRow(paidAt: nov, amount: 50000, totalPrice: 60000, costPrice: 40000),
+        ProfitPayRow(paidAt: nov, amount: 10000, totalPrice: 60000, costPrice: 40000, discount: true),
+      ],
+      expenses: const [],
+      from: from,
+      to: to,
+    );
+    expect(r.collectedWithCost, 50000);
+    expect(r.discounts, 10000);
+    // Asal: (60000 - 10000) - 40000 = 10000
+    expect(r.realizedProfit, 10000);
+    final pr = periodReport(
+      payments: [
+        PayRow(paidAt: nov, kind: payInstallment, amount: 50000, method: 'cash'),
+        PayRow(paidAt: nov, kind: payDiscount, amount: 10000, method: 'cash'),
+      ],
+      plans: const [],
+      closures: const [],
+      from: from,
+      to: to,
+    );
+    expect(pr.collectedInstallments, 50000);
+    expect(pr.cashIn, 50000);
+    expect(pr.paymentCount, 1);
+    expect(pr.discounts, 10000);
+  });
+
   test('profit report: cash sales add their profit; no-cost sales counted apart', () {
     final nov = DateTime(2026, 11, 5).millisecondsSinceEpoch;
     final oct = DateTime(2026, 10, 5).millisecondsSinceEpoch;
@@ -117,12 +150,13 @@ void main() {
       from: from,
       to: to,
       cashSales: [(nov, 47000.0, 40000.0), (nov, 10000.0, 0.0), (oct, 99999.0, 1.0)],
+      keptOnReturns: [(nov, 2000.0), (oct, 5000.0)],
     );
-    expect(r.cashSales, 57000);
-    expect(r.cashSaleProfit, 7000);
+    expect(r.cashSales, 59000); // 47000 + 10000 + 2000 (wapsi par kati raqam)
+    expect(r.cashSaleProfit, 9000); // 7000 + 2000
     expect(r.collectedWithoutCost, 10000);
-    expect(r.grossProfit, 7000);
-    expect(r.netProfit, 7000);
+    expect(r.grossProfit, 9000);
+    expect(r.netProfit, 9000);
   });
 
   test('rate change: set / add / percent, rounding, never negative', () {

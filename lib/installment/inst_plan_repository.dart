@@ -167,6 +167,9 @@ class PlanView {
 
   double get finesTaken => payments.fold<double>(0, (a, p) => a + p.fine);
   double get advancePaid => payments.where((p) => p.kind == payAdvance).fold<double>(0, (a, p) => a + p.amount);
+
+  /// Poori adaigi par di gayi chhoot.
+  double get discountGiven => payments.where((p) => p.kind == payDiscount).fold<double>(0, (a, p) => a + p.amount);
   String get itemTitle => item == null ? '' : (item!.title.isEmpty ? item!.model : item!.title);
 
   /// Customer / plan no / item / IMEI.
@@ -378,7 +381,7 @@ class InstPlanRepository {
       for (final p in plans)
         () {
           final pp = pays[p.id] ?? const <InstPayment>[];
-          final paidInst = pp.where((x) => x.kind == payInstallment).fold<double>(0, (a, x) => a + x.amount);
+          final paidInst = pp.where((x) => x.kind == payInstallment || x.kind == payDiscount).fold<double>(0, (a, x) => a + x.amount);
           final s = sched[p.id] ?? const <(int, double)>[];
           return PlanView(
             plan: p,
@@ -404,23 +407,47 @@ class InstPlanRepository {
 
   /// Qist wasool. [amount] qist mein jata hai, [fine] alag. Baqi se zyada => [ArgumentError].
   /// Poora adaa ho jaye to plan `completed`. Wapas: payment id.
-  Future<int> receive(int planId, {required double amount, double fine = 0, String method = 'cash', String note = '', int? paidAt}) async {
+  /// Wasooli. [discount] (sirf Admin / Manager) = poori / jaldi adaigi par chhoot: baqi mein se kam hoti hai magar
+  /// paisa nahi aata (alag `discount` payment, cash row nahi). Wapas: payment id (sirf discount ho to us ki id).
+  Future<int> receive(int planId,
+      {required double amount, double fine = 0, String method = 'cash', String note = '', int? paidAt, double discount = 0}) async {
     await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
-    if (!amount.isFinite || amount < 0 || !fine.isFinite || fine < 0) throw ArgumentError('Raqam theek nahi.');
-    if (amount <= 0 && fine <= 0) throw ArgumentError('Raqam likhein.');
+    if (!amount.isFinite || amount < 0 || !fine.isFinite || fine < 0 || !discount.isFinite || discount < 0) {
+      throw ArgumentError('Raqam theek nahi.');
+    }
+    if (amount <= 0 && fine <= 0 && discount <= 0) throw ArgumentError('Raqam likhein.');
+    if (discount > 0 && !Session.isAdminOrManager) throw ArgumentError('Discount sirf Admin / Manager de sakta hai.');
     if (method != 'cash' && method != 'bank') throw ArgumentError('Cash ya Bank chunein.');
     final v = await view(planId);
     if (v == null) throw ArgumentError('Plan nahi mila.');
     if (!v.plan.isActive) throw ArgumentError('Ye plan band hai (${v.plan.status}).');
-    if (amount > v.status.remaining + 0.5) {
-      throw ArgumentError('Baqi sirf ${v.status.remaining.round()} hai — is se zyada nahi le sakte.');
+    if (amount + discount > v.status.remaining + 0.5) {
+      throw ArgumentError('Baqi sirf ${v.status.remaining.round()} hai — raqam + discount is se zyada nahi.');
     }
     final db = await AppDatabase.instance.database;
     final when = paidAt ?? _now();
     final id = await db.transaction((txn) async {
-      final payId = await _insertPayment(txn,
-          planId: planId, planNo: v.plan.planNo, kind: payInstallment, amount: amount, fine: fine, method: method, note: note, paidAt: when);
-      if (v.status.remaining - amount <= 0.5) {
+      var payId = 0;
+      if (amount > 0 || fine > 0) {
+        payId = await _insertPayment(txn,
+            planId: planId, planNo: v.plan.planNo, kind: payInstallment, amount: amount, fine: fine, method: method, note: note, paidAt: when);
+      }
+      if (discount > 0) {
+        final did = await txn.insert('inst_payments', {
+          'planId': planId,
+          'kind': payDiscount,
+          'amount': discount,
+          'fine': 0,
+          'method': method,
+          'note': note.trim().isEmpty ? 'Discount' : note.trim(),
+          'receivedBy': Session.username ?? '',
+          'paidAt': when,
+          'createdAt': _now(),
+        });
+        await InstSync.enqueuePayment(txn, did);
+        if (payId == 0) payId = did;
+      }
+      if (v.status.remaining - amount - discount <= 0.5) {
         await txn.update('inst_plans', {'status': planCompleted, 'closedAt': _now(), 'updatedAt': _now()},
             where: 'id = ?', whereArgs: [planId]);
         await InstSync.enqueuePlan(txn, planId);
@@ -436,6 +463,7 @@ class InstPlanRepository {
   Future<void> deletePayment(InstPayment p) async {
     if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager payment hata sakta hai.');
     if (p.kind == payAdvance) throw ArgumentError('Advance plan ke saath hai — plan delete karein.');
+    // Discount ki cash row nahi hoti; _deleteCash phir bhi reference se dhoondta hai (kuch nahi milta) — theek.
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
       await InstSync.enqueueDeleteRow(txn, instPaymentType, 'inst_payments', 'id', p.id);
@@ -547,7 +575,7 @@ class InstPlanRepository {
     final db = await AppDatabase.instance.database;
     final pays = [
       for (final r in await db.rawQuery('''
-        SELECT p.paidAt AS paidAt, p.amount AS amount, p.fine AS fine, pl.totalPrice AS totalPrice, pl.costPrice AS costPrice
+        SELECT p.paidAt AS paidAt, p.kind AS kind, p.amount AS amount, p.fine AS fine, pl.totalPrice AS totalPrice, pl.costPrice AS costPrice
         FROM inst_payments p JOIN inst_plans pl ON pl.id = p.planId
         WHERE p.paidAt >= ? AND p.paidAt < ?
       ''', [from, to]))
@@ -557,19 +585,29 @@ class InstPlanRepository {
           fine: ((r['fine'] as num?) ?? 0).toDouble(),
           totalPrice: ((r['totalPrice'] as num?) ?? 0).toDouble(),
           costPrice: ((r['costPrice'] as num?) ?? 0).toDouble(),
+          discount: r['kind'] == payDiscount,
         )
     ];
     final ex = [
       for (final r in await db.rawQuery('SELECT createdAt, category, amount FROM expenses WHERE createdAt >= ? AND createdAt < ?', [from, to]))
         ((r['createdAt'] as num).toInt(), (r['category'] as String?) ?? '', ((r['amount'] as num?) ?? 0).toDouble())
     ];
-    final cs = (await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_cash_sales'")).isEmpty
-        ? const <(int, double, double)>[]
-        : [
-            for (final r in await db.rawQuery('SELECT soldAt, price, costPrice FROM inst_cash_sales WHERE soldAt >= ? AND soldAt < ?', [from, to]))
-              ((r['soldAt'] as num).toInt(), ((r['price'] as num?) ?? 0).toDouble(), ((r['costPrice'] as num?) ?? 0).toDouble())
-          ];
-    return profitReport(payments: pays, expenses: ex, from: from, to: to, cashSales: cs);
+    final hasSales = (await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_cash_sales'")).isNotEmpty;
+    final saleRows = hasSales
+        ? await db.rawQuery('SELECT soldAt, price, costPrice, returnedAt, refund FROM inst_cash_sales WHERE soldAt >= ? AND soldAt < ?', [from, to])
+        : const <Map<String, Object?>>[];
+    final cs = <(int, double, double)>[];
+    final kept = <(int, double)>[];
+    for (final r in saleRows) {
+      final at = (r['soldAt'] as num).toInt();
+      final price = ((r['price'] as num?) ?? 0).toDouble();
+      if (r['returnedAt'] is num) {
+        kept.add((at, price - ((r['refund'] as num?) ?? 0).toDouble()));
+      } else {
+        cs.add((at, price, ((r['costPrice'] as num?) ?? 0).toDouble()));
+      }
+    }
+    return profitReport(payments: pays, expenses: ex, from: from, to: to, cashSales: cs, keptOnReturns: kept);
   }
 
   // ================================================================ home
@@ -593,7 +631,8 @@ class InstPlanRepository {
     }
     final db = await AppDatabase.instance.database;
     final end = DateTime.fromMillisecondsSinceEpoch(t).add(const Duration(days: 1)).millisecondsSinceEpoch;
-    final got = await db.rawQuery('SELECT COALESCE(SUM(amount + fine), 0) AS v FROM inst_payments WHERE paidAt >= ? AND paidAt < ?', [t, end]);
+    final got = await db.rawQuery(
+        "SELECT COALESCE(SUM(amount + fine), 0) AS v FROM inst_payments WHERE paidAt >= ? AND paidAt < ? AND kind != '$payDiscount'", [t, end]);
     return InstCollectionStats(
       activePlans: views.length,
       dueToday: dueToday,

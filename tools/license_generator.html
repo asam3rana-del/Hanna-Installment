@@ -190,8 +190,31 @@ if (typeof document !== "undefined") {
       }, 30);
     } catch (e) { $("err").textContent = e.message; }
   };
-  $("copy").onclick = () => navigator.clipboard.writeText($("out").value);
-  $("copyRec").onclick = () => navigator.clipboard.writeText(lastRec);
+  // File se khula page (content:// / file://) "secure" nahi hota — wahan navigator.clipboard nahi chalta,
+  // is liye purana tareeqa (chhupa textarea + execCommand) bhi.
+  function copyText(text, btn) {
+    const done = ok => {
+      const old = btn.textContent;
+      btn.textContent = ok ? "Copy ho gaya ✓" : "Copy nahi hua — key par lamba daba kar Select all > Copy";
+      setTimeout(() => { btn.textContent = old; }, 2500);
+    };
+    const fallback = () => {
+      const t = document.createElement("textarea");
+      t.value = text; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.top = "-1000px";
+      document.body.appendChild(t); t.select(); t.setSelectionRange(0, text.length);
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      document.body.removeChild(t);
+      done(ok);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => done(true), fallback);
+    } else {
+      fallback();
+    }
+  }
+  $("copy").onclick = () => copyText($("out").value, $("copy"));
+  $("copyRec").onclick = () => copyText(lastRec, $("copyRec"));
 }
 
 document.getElementById('privFile').addEventListener('change', e => {

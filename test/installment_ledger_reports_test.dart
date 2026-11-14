@@ -91,16 +91,27 @@ void main() {
       CashSaleView(InstCashSale(id: 7, saleNo: 'N-AA0007', itemId: 9, price: 47000, costPrice: 40000, soldAt: day(2026, 11, 6)),
           InstItem(id: 9, categoryId: 1, model: 'A15')),
       CashSaleView(InstCashSale(id: 8, saleNo: 'N-AA0008', itemId: 10, price: 5000, soldAt: day(2026, 10, 6)), null),
+      CashSaleView(
+          InstCashSale(
+              id: 9, saleNo: 'N-AA0009', itemId: 11, price: 30000, costPrice: 25000, soldAt: day(2026, 11, 8),
+              returnedAt: day(2026, 11, 9), refund: 28000),
+          null),
     ];
     final rows = cashSaleRows(sales, from: day(2026, 11, 1), to: day(2026, 12, 1));
-    expect(rows.single.isCash, isTrue);
-    expect(rows.single.cashSaleId, 7);
-    expect(rows.single.customer, 'Naqd');
+    expect(rows.length, 2);
+    final sold = rows.firstWhere((r) => r.cashSaleId == 7);
+    expect(sold.isCash, isTrue);
+    expect(sold.customer, 'Naqd');
+    final ret = rows.firstWhere((r) => r.cashSaleId == 9);
+    expect(ret.isReturned, isTrue);
+    expect(ret.totalPrice, 2000); // 30000 - 28000 wapas
+    expect(ret.expectedProfit, 2000);
     final t = saleTotals(rows);
-    expect(t.cashCount, 1);
-    expect(t.cashValue, 47000);
+    expect(t.cashCount, 2);
+    expect(t.cashValue, 49000);
     expect(t.planCount, 0);
-    expect(t.profit, 7000);
+    expect(t.profit, 9000); // 7000 + 2000
+    expect(t.withoutCost, 0);
   });
 
   test('stock report: only in-stock, by category and age', () {

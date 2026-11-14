@@ -95,6 +95,9 @@ class PeriodReport {
   /// Din (din ki shuruaat) -> us din ki kul wasooli (fine samet).
   final Map<int, double> byDay;
 
+  /// Poori adaigi par di gayi chhoot (wasooli mein nahi ginti).
+  final double discounts;
+
   const PeriodReport({
     required this.collectedInstallments,
     required this.collectedAdvance,
@@ -106,6 +109,7 @@ class PeriodReport {
     required this.newCashValue,
     required this.newTotalValue,
     required this.newCost,
+    this.discounts = 0,
     required this.newExpectedProfit,
     required this.completed,
     required this.repossessed,
@@ -126,8 +130,13 @@ PeriodReport periodReport({
   double inst = 0, adv = 0, fine = 0, cash = 0, bank = 0;
   var count = 0;
   final byDay = <int, double>{};
+  double disc = 0;
   for (final p in payments) {
     if (p.paidAt < from || p.paidAt >= to) continue;
+    if (p.kind == payDiscount) {
+      disc += p.amount; // paisa nahi aaya
+      continue;
+    }
     count++;
     if (p.kind == payAdvance) {
       adv += p.amount;
@@ -175,6 +184,7 @@ PeriodReport periodReport({
     completed: done,
     repossessed: back,
     byDay: byDay,
+    discounts: _r2(disc),
   );
 }
 
@@ -210,7 +220,11 @@ class ProfitPayRow {
   final double fine;
   final double totalPrice;
   final double costPrice;
-  const ProfitPayRow({required this.paidAt, required this.amount, this.fine = 0, required this.totalPrice, required this.costPrice});
+
+  /// Chhoot (kind = discount): munafa ghatata hai.
+  final bool discount;
+  const ProfitPayRow(
+      {required this.paidAt, required this.amount, this.fine = 0, required this.totalPrice, required this.costPrice, this.discount = false});
 }
 
 class ProfitReport {
@@ -228,6 +242,9 @@ class ProfitReport {
   /// Naqd sale (Step 13): kitni sale aur us ka munafa (sale − khareed; khareed na ho to [collectedWithoutCost] mein).
   final double cashSales;
   final double cashSaleProfit;
+
+  /// Poori adaigi par di gayi chhoot (realizedProfit mein us ka asar shamil).
+  final double discounts;
   const ProfitReport({
     required this.collectedWithCost,
     required this.collectedWithoutCost,
@@ -236,6 +253,7 @@ class ProfitReport {
     required this.expenses,
     this.cashSales = 0,
     this.cashSaleProfit = 0,
+    this.discounts = 0,
   });
 
   double get expenseTotal => _r2(expenses.values.fold<double>(0, (a, b) => a + b));
@@ -250,6 +268,7 @@ ProfitReport profitReport({
   required int from,
   required int to,
   List<(int, double, double)> cashSales = const [],
+  List<(int, double)> keptOnReturns = const [],
 }) {
   double withCost = 0, without = 0, profit = 0, fines = 0, cashTotal = 0, cashProfit = 0;
   for (final (at, price, cost) in cashSales) {
@@ -261,8 +280,23 @@ ProfitReport profitReport({
       cashProfit += price - cost;
     }
   }
+  // Wapas hui naqd sale (soldAt, qeemat − refund): piece stock mein wapas, kati hui raqam poori munafa.
+  for (final (at, kept) in keptOnReturns) {
+    if (at < from || at >= to) continue;
+    cashTotal += kept;
+    cashProfit += kept;
+  }
+  double disc = 0;
   for (final p in payments) {
     if (p.paidAt < from || p.paidAt >= to) continue;
+    if (p.discount) {
+      // Chhoot D: qist mein D ka hissa (D × munafa%) ginti mein aata, phir poora D kam — kul asar −D × (khareed / qist qeemat).
+      disc += p.amount;
+      if (p.costPrice > 0 && p.totalPrice > 0) {
+        profit += p.amount * (p.totalPrice - p.costPrice) / p.totalPrice - p.amount;
+      }
+      continue;
+    }
     fines += p.fine;
     if (p.costPrice <= 0 || p.totalPrice <= 0) {
       without += p.amount;
@@ -285,6 +319,7 @@ ProfitReport profitReport({
     expenses: ex,
     cashSales: _r2(cashTotal),
     cashSaleProfit: _r2(cashProfit),
+    discounts: _r2(disc),
   );
 }
 

@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 43;
+  static const _dbVersion = 44;
 
   Database? _db;
 
@@ -636,6 +636,13 @@ class AppDatabase {
         await db.execute(sql);
       }
     }
+    if (oldVersion < 44) {
+      // v44: naqd sale ki wapsi (customer ne saman wapas kiya, paise wapas): piece dobara stock, refund cash OUT.
+      await _addColumnIfMissing(db, 'inst_cash_sales', 'returnedAt', 'INTEGER');
+      await _addColumnIfMissing(db, 'inst_cash_sales', 'refund', 'REAL');
+      await _addColumnIfMissing(db, 'inst_cash_sales', 'returnNote', 'TEXT');
+      await _addColumnIfMissing(db, 'inst_cash_sales', 'refundCashTxId', 'INTEGER');
+    }
     // products.searchTag was added to _onCreate WITHOUT a migration step, so a database created by the
     // earliest builds (schema v1) never got the column. Found by the real-file migration test
     // (test/db_migration_fixtures_test.dart, legacy_v1.db). Idempotent: does nothing when the column exists.
@@ -1170,7 +1177,11 @@ class AppDatabase {
         createdAt INTEGER NOT NULL DEFAULT 0,
         updatedAt INTEGER NOT NULL DEFAULT 0,
         serverId TEXT,
-        customerId INTEGER
+        customerId INTEGER,
+        returnedAt INTEGER,
+        refund REAL,
+        returnNote TEXT,
+        refundCashTxId INTEGER
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_cash_sales_sold ON inst_cash_sales (soldAt)',

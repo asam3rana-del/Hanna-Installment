@@ -85,6 +85,46 @@ class InstCashSaleRepository {
     return id;
   }
 
+  /// Customer ne saman wapas kiya: piece dobara stock mein, [refund] (0..qeemat) cash OUT; sale ka record rehta hai
+  /// (wapsi ki tareekh ke saath). Qeemat − refund = kati hui raqam, dukaan ki aamdani (munafa).
+  Future<void> returnSale(InstCashSale s, {required double refund, String note = '', String method = 'cash'}) async {
+    await LicenseService.instance.requireWritable();
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager sale wapas le sakta hai.');
+    if (s.isReturned) throw ArgumentError('Ye sale pehle hi wapas ho chuki hai.');
+    if (!refund.isFinite || refund < 0 || refund > s.price + 0.5) {
+      throw ArgumentError('Wapas di jane wali raqam 0 se ${s.price.round()} tak ho.');
+    }
+    if (method != 'cash' && method != 'bank') throw ArgumentError('Cash ya Bank chunein.');
+    final db = await AppDatabase.instance.database;
+    final now = _now();
+    await db.transaction((txn) async {
+      final n = await txn.update('inst_items', {'status': itemInStock, 'updatedAt': now},
+          where: 'id = ? AND status = ?', whereArgs: [s.itemId, itemSold]);
+      if (n > 0) await InstSync.enqueueItem(txn, s.itemId);
+      int? cashId;
+      if (refund > 0) {
+        final cash = CashTransaction(
+          type: 'OUT',
+          method: method,
+          amount: refund,
+          reason: 'Sale wapsi: ${s.saleNo}',
+          reference: 'inst-sret:${s.id}',
+          createdAt: now,
+          updatedAt: now,
+        );
+        cashId = await txn.insert('cash_transactions', cash.toMap()..remove('id'));
+        await SyncQueueHelper.enqueueCashTransaction(txn, cashId);
+      }
+      await txn.update(
+          'inst_cash_sales',
+          {'returnedAt': now, 'refund': refund, 'returnNote': note.trim(), 'refundCashTxId': cashId, 'updatedAt': now},
+          where: 'id = ?',
+          whereArgs: [s.id]);
+      await InstSync.enqueueCashSale(txn, s.id);
+    });
+    _changed();
+  }
+
   /// Ghalat sale wapas: piece dobara stock mein, cash row hat'ti hai.
   Future<void> cancel(InstCashSale s) async {
     if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager sale wapas kar sakta hai.');
@@ -95,19 +135,20 @@ class InstCashSaleRepository {
           where: 'id = ? AND status = ?', whereArgs: [s.itemId, itemSold]);
       if (n > 0) await InstSync.enqueueItem(txn, s.itemId);
       await _deleteCash(txn, s.id, s.cashTxId);
+      if (s.isReturned) await _deleteCash(txn, s.id, s.refundCashTxId, prefix: 'inst-sret:');
       await InstSync.enqueueDeleteRow(txn, instCashSaleType, 'inst_cash_sales', 'id', s.id);
       await txn.delete('inst_cash_sales', where: 'id = ?', whereArgs: [s.id]);
     });
     _changed();
   }
 
-  Future<void> _deleteCash(DatabaseExecutor txn, int saleId, int? cashTxId) async {
-    await SyncQueueHelper.deleteCashTransactionsByReference(txn, 'inst-sale:$saleId');
+  Future<void> _deleteCash(DatabaseExecutor txn, int saleId, int? cashTxId, {String prefix = 'inst-sale:'}) async {
+    await SyncQueueHelper.deleteCashTransactionsByReference(txn, '$prefix$saleId');
     if (cashTxId == null) return;
     final rows = await txn.query('cash_transactions', where: 'id = ?', whereArgs: [cashTxId], limit: 1);
     if (rows.isEmpty) return;
     final row = Map<String, Object?>.from(rows.first);
-    if (!(row['reference'] as String? ?? '').startsWith('inst-sale:')) return; // kisi aur ki row nahi chhedte
+    if (!(row['reference'] as String? ?? '').startsWith(prefix)) return; // kisi aur ki row nahi chhedte
     await txn.delete('cash_transactions', where: 'id = ?', whereArgs: [cashTxId]);
     await SyncQueueHelper.enqueueDelete(txn, 'cash_transaction', SyncQueueHelper.cashTransactionEntityId(row));
   }
@@ -174,6 +215,12 @@ class InstCashSale {
   final int soldAt;
   final int? cashTxId;
 
+  /// Wapsi (v44): kab, kitne wapas diye, kyun, refund ki cash row.
+  final int? returnedAt;
+  final double refund;
+  final String returnNote;
+  final int? refundCashTxId;
+
   const InstCashSale({
     required this.id,
     required this.saleNo,
@@ -188,10 +235,20 @@ class InstCashSale {
     this.soldBy = '',
     required this.soldAt,
     this.cashTxId,
+    this.returnedAt,
+    this.refund = 0,
+    this.returnNote = '',
+    this.refundCashTxId,
   });
 
+  bool get isReturned => returnedAt != null;
   bool get hasCost => costPrice > 0;
-  double get profit => hasCost ? price - costPrice : 0;
+
+  /// Dukaan ke paas kitna raha (wapsi par qeemat − refund).
+  double get kept => isReturned ? price - refund : price;
+
+  /// Wapsi par piece stock mein wapas — munafa sirf kati hui raqam.
+  double get profit => isReturned ? price - refund : (hasCost ? price - costPrice : 0);
 
   factory InstCashSale.fromMap(Map<String, Object?> m) => InstCashSale(
         id: ((m['id'] as num?) ?? 0).toInt(),
@@ -207,6 +264,10 @@ class InstCashSale {
         soldBy: (m['soldBy'] as String?) ?? '',
         soldAt: ((m['soldAt'] as num?) ?? 0).toInt(),
         cashTxId: (m['cashTxId'] as num?)?.toInt(),
+        returnedAt: (m['returnedAt'] as num?)?.toInt(),
+        refund: ((m['refund'] as num?) ?? 0).toDouble(),
+        returnNote: (m['returnNote'] as String?) ?? '',
+        refundCashTxId: (m['refundCashTxId'] as num?)?.toInt(),
       );
 }
 

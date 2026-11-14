@@ -4,6 +4,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_info.dart';
+import '../screens/cash_screen.dart';
+import '../screens/expense_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/crash_handler.dart';
@@ -132,6 +134,63 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     } catch (_) {}
   }
 
+  /// Dashboard se ek jagah: paise aana (qist, naqd sale, cash in) aur jana (supplier, kharcha, cash out).
+  Future<void> _payReceive() async {
+    final p = ThemeManager.palette;
+    final mgr = Session.isAdminOrManager;
+    Widget item(IconData icon, Color color, String title, String sub, Widget screen) => ListTile(
+          leading: CircleAvatar(backgroundColor: color.withOpacity(0.14), child: Icon(icon, color: color)),
+          title: Text(title, style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+          subtitle: Text(sub, style: TextStyle(color: p.textMuted, fontSize: 12)),
+          trailing: Icon(Icons.chevron_right, color: p.textMuted),
+          onTap: () {
+            Navigator.of(context).pop();
+            _push(screen);
+          },
+        );
+    Widget head(String t, Color c) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+          child: Text(t, style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+        );
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: p.bg,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            head(Loc.t('RECEIVE (MONEY IN)', 'لینا (رقم آئی)'), p.teal),
+            item(Icons.request_quote_outlined, p.teal, Loc.t('Installment collection', 'قسط کی وصولی'),
+                Loc.t('Pick the customer, then Receive', 'کسٹمر چنیں، پھر وصول کریں'), const InstCollectionListScreen()),
+            item(Icons.point_of_sale, p.tealDark, Loc.t('Cash sale', 'نقد سیل'), Loc.t('Sell a piece for full payment', 'پوری رقم پر پیس بیچیں'),
+                const InstNewCashSaleScreen()),
+            item(Icons.south_west, p.blue, Loc.t('Other money in (Cash In)', 'دوسری آمد (کیش ان)'),
+                Loc.t('Opening cash, owner money...', 'شروع کا کیش، مالک کی رقم...'), const CashScreen()),
+            head(Loc.t('PAY (MONEY OUT)', 'دینا (رقم گئی)'), p.red),
+            if (mgr)
+              item(Icons.local_shipping_outlined, p.red, Loc.t('Pay supplier', 'سپلائر کو ادائیگی'),
+                  Loc.t('Choose supplier, then Pay', 'سپلائر چنیں، پھر ادا کریں'), const InstSuppliersScreen()),
+            item(Icons.receipt_long_outlined, p.orange, Loc.t('Expense', 'خرچہ'), Loc.t('Electricity, tea, repairs...', 'بجلی، چائے، مرمت...'),
+                const ExpenseScreen()),
+            item(Icons.north_east, p.purple, Loc.t('Other money out (Cash Out)', 'دوسرا خرچ (کیش آؤٹ)'),
+                Loc.t('Owner withdrawal, bank deposit...', 'مالک نے نکالے، بینک میں جمع...'), const CashScreen()),
+            head(Loc.t('RETURNS', 'واپسی'), p.orange),
+            item(Icons.assignment_return_outlined, p.orange, Loc.t('Sale return (customer)', 'سیل واپسی (کسٹمر)'),
+                Loc.t('Open the cash sale, then "Sale return"', 'نقد سیل کھولیں، پھر "سیل واپسی"'), const InstCashSalesScreen()),
+            if (mgr)
+              item(Icons.keyboard_return, p.navy, Loc.t('Purchase return (supplier)', 'خریداری واپسی (سپلائر)'),
+                  Loc.t('Open the bill, then "Return"', 'بل کھولیں، پھر "واپس کریں"'), const InstPurchasesScreen()),
+            if (mgr)
+              item(Icons.undo, p.red, Loc.t('Installment item taken back', 'قسط کا سامان واپس'),
+                  Loc.t('Open the plan, ⋮ menu > "Take item back"', 'پلان کھولیں، ⋮ مینو > "سامان واپس لیں"'), const InstPlansScreen()),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Future<void> _push(Widget w) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
     await _load();
@@ -151,6 +210,8 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     final tiles = <_Tile>[
       _Tile(Icons.add_card, Loc.t('New Installment', 'نئی قسط'), Loc.t('Customer + item + plan', 'کسٹمر + سامان + پلان'), p.teal,
           () => _push(const NewInstallmentScreen())),
+      _Tile(Icons.swap_vert_circle_outlined, Loc.t('Pay / Receive', 'لینا / دینا'), Loc.t('Collect, pay, returns', 'وصولی، ادائیگی، واپسی'), p.teal,
+          _payReceive),
       _Tile(Icons.request_quote_outlined, Loc.t('Installments', 'قسطیں'), Loc.t('${_col.activePlans} active plans', '${_col.activePlans} جاری پلان'), p.navy,
           () => _push(const InstPlansScreen())),
       _Tile(Icons.point_of_sale, Loc.t('Cash Sale', 'نقد سیل'), Loc.t('Sell without installments', 'بغیر قسط بیچیں'), p.tealDark,

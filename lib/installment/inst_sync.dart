@@ -330,6 +330,12 @@ class InstSync {
       if (cash != null) cashSid = SyncQueueHelper.cashTransactionEntityId(cash);
     }
     final csid = r['customerId'] is num ? await customerServerId(ex, _i(r['customerId'])) : null;
+    String? refundSid;
+    final refundId = r['refundCashTxId'];
+    if (refundId is num) {
+      final cash = await _row(ex, 'cash_transactions', 'id', refundId.toInt());
+      if (cash != null) refundSid = SyncQueueHelper.cashTransactionEntityId(cash);
+    }
     final eid = _own('inst_cash_sale:', r);
     await _stampServerId(ex, 'inst_cash_sales', 'id', id, eid);
     await SyncQueueHelper.enqueue(ex, instCashSaleType, eid, 'upsert', _stamp({
@@ -342,6 +348,10 @@ class InstSync {
       'costPrice': _d(r['costPrice']),
       'soldAt': _i(r['soldAt']),
       'createdAt': _i(r['createdAt']),
+      'returnedAt': r['returnedAt'] is num ? _i(r['returnedAt']) : null,
+      'refund': _d(r['refund']),
+      'returnNote': _s(r['returnNote']),
+      'refundCashServerId': refundSid,
     }));
   }
 
@@ -691,7 +701,8 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
     if (pid == null) continue;
     final cashSid = _sn(d['cashServerId']);
     final cashId = cashSid == null ? null : await _localIdBySid(db, 'cash_transactions', cashSid);
-    final kind = _s(d['kind']) == 'advance' ? 'advance' : 'installment';
+    final k0 = _s(d['kind']);
+    final kind = k0 == 'advance' ? 'advance' : (k0 == 'discount' ? 'discount' : 'installment');
     final values = <String, Object?>{
       'planId': pid,
       'kind': kind,
@@ -735,6 +746,12 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
         'costPrice': _d(d['costPrice']),
         'soldAt': _i(d['soldAt']),
         'cashTxId': cashId,
+        'returnedAt': d['returnedAt'] is num ? (d['returnedAt'] as num).toInt() : null,
+        'refund': _d(d['refund']),
+        'returnNote': _s(d['returnNote']),
+        'refundCashTxId': _sn(d['refundCashServerId']) == null
+            ? null
+            : await _localIdBySid(db, 'cash_transactions', _s(d['refundCashServerId'])),
         'updatedAt': _i(d['updatedAt']),
       };
       if (localId == null) {

@@ -1033,7 +1033,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
     final shop = await loadShopHeader();
     // Payment ke waqt ka baqi: is payment ke baad wali qist-payments ko wapas jor kar.
     final later = v.payments
-        .where((x) => x.kind == payInstallment && (x.paidAt > pay.paidAt || (x.paidAt == pay.paidAt && x.id > pay.id)))
+        .where((x) => (x.kind == payInstallment || x.kind == payDiscount) && (x.paidAt > pay.paidAt || (x.paidAt == pay.paidAt && x.id > pay.id)))
         .fold<double>(0, (a, x) => a + x.amount);
     final remaining = v.status.remaining + later;
     final next = v.status.next;
@@ -1057,7 +1057,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
   double _remainingAfter(PlanView v, InstPayment pay) =>
       v.status.remaining +
       v.payments
-          .where((x) => x.kind == payInstallment && (x.paidAt > pay.paidAt || (x.paidAt == pay.paidAt && x.id > pay.id)))
+          .where((x) => (x.kind == payInstallment || x.kind == payDiscount) && (x.paidAt > pay.paidAt || (x.paidAt == pay.paidAt && x.id > pay.id)))
           .fold<double>(0, (a, x) => a + x.amount);
 
   Future<void> _sendReceipt(PlanView v, InstPayment pay) async {
@@ -1097,11 +1097,13 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
     final fine = suggestedFine(status: st, lateFee: v.plan.lateFee, graceDays: v.plan.graceDays, today: today, finesAlreadyTaken: v.finesTaken);
     final res = await showDialog<_ReceiveResult>(
       context: context,
-      builder: (_) => _ReceiveDialog(defaultAmount: suggest, max: st.remaining, suggestedFine: fine),
+      builder: (_) => _ReceiveDialog(
+          defaultAmount: suggest, max: st.remaining, suggestedFine: fine, allowDiscount: Session.isAdminOrManager),
     );
     if (res == null || !mounted) return;
     try {
-      final payId = await InstPlanRepository.instance.receive(v.plan.id, amount: res.amount, fine: res.fine, method: res.method, note: res.note);
+      final payId = await InstPlanRepository.instance
+          .receive(v.plan.id, amount: res.amount, fine: res.fine, method: res.method, note: res.note, discount: res.discount);
       await _reload();
       if (!mounted) return;
       final fresh = _v;
@@ -1110,7 +1112,9 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(Loc.t('Received', 'وصول ہو گیا')),
-          content: Text('${instRs(res.amount + res.fine)}\n${Loc.t('Remaining', 'باقی')}: ${instRs(fresh?.status.remaining ?? 0)}'),
+          content: Text('${instRs(res.amount + res.fine)}'
+              '${res.discount > 0 ? '\n${Loc.t('Discount', 'رعایت')}: ${instRs(res.discount)}' : ''}'
+              '\n${Loc.t('Remaining', 'باقی')}: ${instRs(fresh?.status.remaining ?? 0)}'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Close', 'بند'))),
             FilledButton.icon(
@@ -1416,8 +1420,9 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
       ),
       if (Session.isAdminOrManager && v.plan.costPrice > 0)
         Text(
-          '${Loc.t('Profit', 'منافع')}: ${instRs(profitShare(collected: st.paid + v.advancePaid, totalPrice: v.plan.totalPrice, costPrice: v.plan.costPrice) ?? 0)}'
-          ' ${Loc.t('received of', 'وصول، کل')} ${instRs(v.plan.totalPrice - v.plan.costPrice)}',
+          // Discount: qist mein ginti hoti hai magar paisa nahi aata — munafe se poora kam.
+          '${Loc.t('Profit', 'منافع')}: ${instRs((profitShare(collected: st.paid + v.advancePaid, totalPrice: v.plan.totalPrice, costPrice: v.plan.costPrice) ?? 0) - v.discountGiven)}'
+          ' ${Loc.t('received of', 'وصول، کل')} ${instRs(v.plan.totalPrice - v.plan.costPrice - v.discountGiven)}',
           style: TextStyle(color: p.textMuted, fontSize: 11.5),
         ),
     ]);
@@ -1458,17 +1463,21 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
         padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
         decoration: instCard(p),
         child: Row(children: [
-          Icon(pay.kind == payAdvance ? Icons.savings_outlined : Icons.payments_outlined, color: p.teal),
+          Icon(
+              pay.kind == payAdvance
+                  ? Icons.savings_outlined
+                  : (pay.kind == payDiscount ? Icons.local_offer_outlined : Icons.payments_outlined),
+              color: pay.kind == payDiscount ? p.amber : p.teal),
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
-                '${pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : Loc.t('Qist', 'قسط')}  ${instRs(pay.amount)}'
+                '${pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : (pay.kind == payDiscount ? Loc.t('Discount', 'رعایت') : Loc.t('Qist', 'قسط'))}  ${instRs(pay.amount)}'
                 '${pay.fine > 0 ? '  + ${Loc.t('fine', 'جرمانہ')} ${instRs(pay.fine)}' : ''}',
                 style: TextStyle(color: p.textDark, fontWeight: FontWeight.w600),
               ),
               Text(
-                '${_dt(pay.paidAt)}  •  ${pay.method == 'bank' ? Loc.t('Bank', 'بینک') : Loc.t('Cash', 'کیش')}'
+                '${_dt(pay.paidAt)}  •  ${pay.kind == payDiscount ? Loc.t('no cash', 'بغیر کیش') : (pay.method == 'bank' ? Loc.t('Bank', 'بینک') : Loc.t('Cash', 'کیش'))}'
                 '${pay.receivedBy.isNotEmpty ? '  •  ${pay.receivedBy}' : ''}${pay.note.isNotEmpty ? '\n${pay.note}' : ''}',
                 style: TextStyle(color: p.textMuted, fontSize: 11.5),
               ),
@@ -1479,7 +1488,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
             icon: Icon(Icons.send_outlined, color: p.teal),
             onPressed: () => _sendReceipt(v, pay),
           ),
-          if (Session.isAdminOrManager && pay.kind == payInstallment)
+          if (Session.isAdminOrManager && pay.kind != payAdvance)
             IconButton(icon: Icon(Icons.delete_outline, color: p.textMuted), onPressed: () => _deletePayment(pay)),
         ]),
       );
@@ -1492,14 +1501,18 @@ class _ReceiveResult {
   final double fine;
   final String method;
   final String note;
-  const _ReceiveResult(this.amount, this.fine, this.method, this.note);
+  final double discount;
+  const _ReceiveResult(this.amount, this.fine, this.method, this.note, [this.discount = 0]);
 }
 
 class _ReceiveDialog extends StatefulWidget {
   final double defaultAmount;
   final double max;
   final double suggestedFine;
-  const _ReceiveDialog({required this.defaultAmount, required this.max, required this.suggestedFine});
+
+  /// Admin / Manager: poori adaigi par chhoot.
+  final bool allowDiscount;
+  const _ReceiveDialog({required this.defaultAmount, required this.max, required this.suggestedFine, this.allowDiscount = false});
 
   @override
   State<_ReceiveDialog> createState() => _ReceiveDialogState();
@@ -1509,15 +1522,35 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
   late final _amount = TextEditingController(text: instPlain(widget.defaultAmount.clamp(0, widget.max).toDouble()));
   late final _fine = TextEditingController(text: widget.suggestedFine > 0 ? instPlain(widget.suggestedFine) : '');
   final _note = TextEditingController();
+  final _discount = TextEditingController();
   String _method = 'cash';
   String? _error;
+  bool _settle = false;
+
+  @override
+  void dispose() {
+    for (final c in [_amount, _fine, _note, _discount]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Poora hisaab: raqam = baqi − discount (discount badle to raqam bhi).
+  void _fillSettle() {
+    final d = instParse(_discount.text).clamp(0, widget.max).toDouble();
+    _amount.text = instPlain(widget.max - d);
+  }
 
   void _ok() {
     final a = instParse(_amount.text);
     final f = instParse(_fine.text);
-    if (a <= 0 && f <= 0) return setState(() => _error = Loc.t('Enter amount', 'رقم لکھیں'));
-    if (a > widget.max + 0.5) return setState(() => _error = Loc.t('More than remaining (${instRs(widget.max)})', 'باقی (${instRs(widget.max)}) سے زیادہ'));
-    Navigator.pop(context, _ReceiveResult(a, f, _method, _note.text));
+    final d = widget.allowDiscount ? instParse(_discount.text) : 0.0;
+    if (a <= 0 && f <= 0 && d <= 0) return setState(() => _error = Loc.t('Enter amount', 'رقم لکھیں'));
+    if (a + d > widget.max + 0.5) {
+      return setState(() => _error = Loc.t('Amount + discount more than remaining (${instRs(widget.max)})',
+          'رقم + رعایت باقی (${instRs(widget.max)}) سے زیادہ'));
+    }
+    Navigator.pop(context, _ReceiveResult(a, f, _method, _note.text, d));
   }
 
   @override
@@ -1540,6 +1573,44 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
             alignment: Alignment.centerLeft,
             child: Text('${Loc.t('Remaining', 'باقی')}: ${instRs(widget.max)}', style: TextStyle(color: p.textMuted, fontSize: 11.5)),
           ),
+          if (widget.allowDiscount) ...[
+            const SizedBox(height: 8),
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _settle,
+              title: Text(Loc.t('Full settlement (pay all remaining)', 'پورا حساب (سارا باقی ایک ساتھ)')),
+              onChanged: (v) => setState(() {
+                _settle = v == true;
+                if (_settle) {
+                  _fillSettle();
+                } else {
+                  _discount.clear();
+                }
+              }),
+            ),
+            if (_settle) ...[
+              TextField(
+                controller: _discount,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: money,
+                onChanged: (_) => setState(_fillSettle),
+                decoration: instDeco(p, Loc.t('Discount', 'رعایت (ڈسکاؤنٹ)')),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${Loc.t('Customer pays', 'کسٹمر دے گا')}: ${instRs(instParse(_amount.text))}'
+                    '${instParse(_discount.text) > 0 ? '  •  ${Loc.t('discount', 'رعایت')} ${instRs(instParse(_discount.text))}' : ''}',
+                    style: TextStyle(color: p.teal, fontWeight: FontWeight.bold, fontSize: 12.5),
+                  ),
+                ),
+              ),
+            ],
+          ],
           const SizedBox(height: 10),
           TextField(
             controller: _fine,

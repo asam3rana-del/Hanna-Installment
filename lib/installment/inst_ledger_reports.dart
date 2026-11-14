@@ -53,10 +53,13 @@ class SaleRow {
   });
 
   bool get isCash => cashSaleId != null;
-  bool get hasCost => costPrice > 0;
+
+  /// Wapas hui naqd sale: [totalPrice] = kati hui raqam (piece stock mein wapas), poori munafa.
+  bool get isReturned => status == 'returned';
+  bool get hasCost => costPrice > 0 || isReturned;
 
   /// Qist qeemat − khareed (khareed na ho to 0).
-  double get expectedProfit => hasCost ? _r(totalPrice - costPrice) : 0;
+  double get expectedProfit => isReturned ? _r(totalPrice) : (hasCost ? _r(totalPrice - costPrice) : 0);
 }
 
 class SaleTotals {
@@ -115,15 +118,15 @@ List<SaleRow> cashSaleRows(List<CashSaleView> sales, {required int from, require
             planId: 0,
             planNo: v.sale.saleNo,
             date: v.sale.soldAt,
-            customer: v.sale.customerName.isEmpty ? 'Naqd' : v.sale.customerName,
+            customer: '${v.sale.customerName.isEmpty ? 'Naqd' : v.sale.customerName}${v.sale.isReturned ? ' (wapas)' : ''}',
             item: v.itemTitle,
             itemId: v.item?.primaryId ?? '',
             categoryId: v.item?.categoryId,
-            cashPrice: v.sale.price,
-            advance: v.sale.price,
-            totalPrice: v.sale.price,
-            costPrice: v.sale.costPrice,
-            status: 'cash',
+            cashPrice: v.sale.kept,
+            advance: v.sale.kept,
+            totalPrice: v.sale.kept,
+            costPrice: v.sale.isReturned ? 0 : v.sale.costPrice,
+            status: v.sale.isReturned ? 'returned' : 'cash',
             cashSaleId: v.sale.id,
           )
     ];
@@ -140,7 +143,9 @@ SaleTotals saleTotals(List<SaleRow> rows) {
     cash += r.cashPrice;
     adv += r.advance;
     total += r.totalPrice;
-    if (r.hasCost) {
+    if (r.isReturned) {
+      profit += r.totalPrice;
+    } else if (r.hasCost) {
       cost += r.costPrice;
       profit += r.totalPrice - r.costPrice;
     } else {

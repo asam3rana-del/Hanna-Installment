@@ -275,7 +275,7 @@ class InstPdf {
           _section(Loc.t('Payments received', 'وصولیاں')),
           for (final pay in v.payments.reversed)
             _kv(_d(pay.paidAt),
-                '${pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : Loc.t('Qist', 'قسط')}  ${_rs(pay.amount)}'
+                '${pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : (pay.kind == payDiscount ? Loc.t('Discount', 'رعایت') : Loc.t('Qist', 'قسط'))}  ${_rs(pay.amount)}'
                 '${pay.fine > 0 ? '  + ${Loc.t('fine', 'جرمانہ')} ${_rs(pay.fine)}' : ''}  (${pay.method})'),
         ],
         pw.SizedBox(height: 26),
@@ -351,7 +351,7 @@ class InstPdf {
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: _teal, width: 1), borderRadius: pw.BorderRadius.circular(6)),
             child: pw.Column(children: [
-              _kv(pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : Loc.t('Qist received', 'قسط وصول'), _rs(pay.amount), bold: true, argb: 0xFF0F9B8E),
+              _kv(pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : (pay.kind == payDiscount ? Loc.t('Discount', 'رعایت') : Loc.t('Qist received', 'قسط وصول')), _rs(pay.amount), bold: true, argb: 0xFF0F9B8E),
               if (pay.fine > 0) _kv(Loc.t('Late fine', 'لیٹ جرمانہ'), _rs(pay.fine)),
               _kv(Loc.t('Total', 'کل'), _rs(pay.amount + pay.fine), bold: true),
               _kv(Loc.t('Method', 'طریقہ'), pay.method == 'bank' ? Loc.t('Bank', 'بینک') : Loc.t('Cash', 'کیش')),

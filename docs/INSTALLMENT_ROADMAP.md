@@ -161,5 +161,19 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
   customer ke page par "Naqd khareedari"
 - Karobar ki surat: haath mein cash + bank (cash_transactions IN − OUT) bhi; khalis = lena + stock + cash + bank − dena
 
+## Step 15 — done (DB v44)
+- Naqd sale ki wapsi: sale > "Sale wapsi" -> kitne wapas diye (0..qeemat), cash/bank, wajah -> piece stock mein,
+  refund cash OUT (`inst-sret:<id>`); sale record rehta hai (returnedAt / refund / returnNote / refundCashTxId, sync).
+  Munafa: kati hui raqam (qeemat − refund). "Ghalat entry delete" alag (sab mita deta hai)
+- Dashboard: "Pay / Receive" (lena / dena / wapsi): qist wasooli, naqd sale, cash in, supplier, kharcha, cash out,
+  sale wapsi, khareed wapsi, qist ka saman wapas. Zakat Settings se hata
+- License: device code ab secure storage (backup password wale options) + prefs — har dafa naya code wala bug khatam
+
+## Step 16 — done (DB change nahi): poori adaigi par discount
+- Wasooli dialog (Admin / Manager): "Poora hisaab" tick -> Discount likho, raqam = baqi − discount khud. Discount alag
+  payment (kind `discount`, cash row nahi): baqi kam, plan mukammal; wasooli / cash / aaj ki wasooli mein nahi ginti.
+  Munafa: −discount × (khareed / qist qeemat) (yani asal = (qist − discount) − khareed). Reports mein "Rayat di"
+- Plan screen par discount ki line (🏷), raseed / PDF mein "Discount"; hata bhi sakte hain (Admin / Manager)
+
 ## Abhi baqi
 - Feature graphic (Play Store)

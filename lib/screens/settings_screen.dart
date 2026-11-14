@@ -35,7 +35,6 @@ import 'shop_rent_screen.dart';
 import 'user_management_screen.dart';
 import 'utility_bills_screen.dart';
 import 'workers_screen.dart';
-import 'zakat_screen.dart';
 import '../services/permissions.dart';
 import '../widgets/permission_guard.dart';
 
@@ -447,9 +446,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (Permissions.can('cash_register'))
         row(Icons.account_balance_outlined, 'Cash & Bank', 'کیش اور بینک',
             const PermissionGuard(permission: 'cash_register', child: CashScreen()), color: p.navyInk),
-      if (Permissions.can('zakat'))
-        row(Icons.volunteer_activism_outlined, 'Zakat', 'زکوٰۃ',
-            const PermissionGuard(permission: 'zakat', child: ZakatScreen()), color: p.navyInk),
+      // Hanna Installment: Zakat hata diya (user ki darkhwast, 2026-11-14). Table / sync wahi (purana data mehfooz).
     ];
   }
 

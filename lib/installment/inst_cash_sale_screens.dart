@@ -134,7 +134,15 @@ class _InstCashSalesScreenState extends State<InstCashSalesScreen> {
                               [v.sale.saleNo, _dt(v.sale.soldAt), if (v.sale.customerName.isNotEmpty) v.sale.customerName].join('  •  '),
                               style: TextStyle(color: p.textMuted, fontSize: 12),
                             ),
-                            trailing: Text(instRs(v.sale.price), style: TextStyle(color: p.teal, fontWeight: FontWeight.bold)),
+                            trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                              Text(instRs(v.sale.price),
+                                  style: TextStyle(
+                                      color: v.sale.isReturned ? p.textMuted : p.teal,
+                                      fontWeight: FontWeight.bold,
+                                      decoration: v.sale.isReturned ? TextDecoration.lineThrough : null)),
+                              if (v.sale.isReturned)
+                                Text(Loc.t('Returned', 'واپس'), style: TextStyle(color: p.red, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                            ]),
                           ),
                         );
                       },
@@ -455,15 +463,82 @@ class _InstCashSaleDetailScreenState extends State<InstCashSaleDetailScreen> {
     }
   }
 
+  /// Customer ne saman wapas kiya: kitne paise wapas diye (pehle se poori qeemat), wajah.
+  Future<void> _return() async {
+    final v = _v;
+    if (v == null) return;
+    final p = ThemeManager.palette;
+    final amount = TextEditingController(text: instPlain(v.sale.price));
+    final note = TextEditingController();
+    var method = v.sale.method;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          final refund = instParse(amount.text);
+          return AlertDialog(
+            title: Text(Loc.t('Sale return', 'سیل واپسی')),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${v.sale.saleNo} • ${v.itemTitle} • ${instRs(v.sale.price)}', style: TextStyle(color: p.textMuted)),
+                const SizedBox(height: 6),
+                Text(Loc.t('The piece goes back into stock.', 'پیس دوبارہ اسٹاک میں جائے گا۔'), style: TextStyle(color: p.teal)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                  onChanged: (_) => setD(() {}),
+                  decoration: instDeco(p, Loc.t('Money given back to customer', 'کسٹمر کو واپس دی گئی رقم')),
+                ),
+                if (refund < v.sale.price - 0.5)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('${Loc.t('Deduction kept by shop', 'دکان نے کاٹے')}: ${instRs(v.sale.price - refund)}',
+                        style: TextStyle(color: p.teal, fontWeight: FontWeight.bold)),
+                  ),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment(value: 'cash', label: Text(Loc.t('Cash', 'کیش'))),
+                    ButtonSegment(value: 'bank', label: Text(Loc.t('Bank', 'بینک'))),
+                  ],
+                  selected: {method},
+                  onSelectionChanged: (x) => setD(() => method = x.first),
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: note, decoration: instDeco(p, Loc.t('Reason', 'وجہ'))),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Cancel', 'منسوخ'))),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(Loc.t('Return', 'واپس لیں'))),
+            ],
+          );
+        },
+      ),
+    );
+    // Controllers dispose nahi kiye: dialog ki band hone wali animation abhi unhein istemal kar rahi hoti hai.
+    if (ok != true) return;
+    try {
+      await InstCashSaleRepository.instance.returnSale(v.sale, refund: instParse(amount.text), note: note.text, method: method);
+      await _load();
+      if (mounted) instToast(context, Loc.t('Returned. Piece is back in stock.', 'واپس ہو گیا۔ پیس اسٹاک میں آ گیا۔'));
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
+  }
+
   Future<void> _cancel() async {
     final v = _v;
     if (v == null) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(Loc.t('Cancel this sale?', 'یہ سیل واپس کریں؟')),
-        content: Text(Loc.t('${v.sale.saleNo}: the piece goes back to stock and the cash entry is removed.',
-            '${v.sale.saleNo}: پیس دوبارہ اسٹاک میں جائے گا اور کیش کا اندراج ہٹ جائے گا۔')),
+        title: Text(Loc.t('Delete this wrong entry?', 'یہ غلط اندراج حذف کریں؟')),
+        content: Text(Loc.t(
+            '${v.sale.saleNo}: only for a mistake — the sale disappears, the piece goes back to stock and its cash entries are removed. For a real customer return use "Sale return".',
+            '${v.sale.saleNo}: صرف غلطی کے لیے — سیل ختم، پیس اسٹاک میں، کیش کے اندراج ہٹ جائیں گے۔ اصل واپسی کے لیے "سیل واپسی" استعمال کریں۔')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('No', 'نہیں'))),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(Loc.t('Yes, cancel', 'ہاں، واپس'))),
@@ -489,7 +564,10 @@ class _InstCashSaleDetailScreenState extends State<InstCashSaleDetailScreen> {
       body: Column(children: [
         instHeader(context, p, v == null ? Loc.t('Cash Sale', 'نقد سیل') : v.sale.saleNo, v?.itemTitle ?? '', actions: [
           if (v != null && money)
-            IconButton(tooltip: Loc.t('Cancel sale', 'سیل واپس'), icon: const Icon(Icons.undo, color: Colors.white), onPressed: _cancel),
+            IconButton(
+                tooltip: Loc.t('Delete wrong entry', 'غلط اندراج حذف'),
+                icon: const Icon(Icons.delete_outline, color: Colors.white),
+                onPressed: _cancel),
         ]),
         Expanded(
           child: !_loaded
@@ -523,6 +601,33 @@ class _InstCashSaleDetailScreenState extends State<InstCashSaleDetailScreen> {
                           instInfoLine(p, Loc.t('Sold by', 'فروخت کنندہ'), v.sale.soldBy),
                         ]),
                       ),
+                      if (v.sale.isReturned) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: instCard(p),
+                          child: Column(children: [
+                            Row(children: [
+                              Icon(Icons.assignment_return_outlined, color: p.red),
+                              const SizedBox(width: 8),
+                              Text(Loc.t('Returned by customer', 'کسٹمر نے واپس کیا'), style: TextStyle(color: p.red, fontWeight: FontWeight.bold)),
+                            ]),
+                            const SizedBox(height: 6),
+                            instInfoLine(p, Loc.t('Date', 'تاریخ'), _dt(v.sale.returnedAt!)),
+                            instInfoLine(p, Loc.t('Money given back', 'واپس دی رقم'), instRs(v.sale.refund)),
+                            instInfoLine(p, Loc.t('Kept by shop', 'دکان کے پاس رہا'), instRs(v.sale.kept)),
+                            instInfoLine(p, Loc.t('Reason', 'وجہ'), v.sale.returnNote),
+                          ]),
+                        ),
+                      ] else if (money) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), foregroundColor: p.red),
+                          onPressed: _return,
+                          icon: const Icon(Icons.assignment_return_outlined),
+                          label: Text(Loc.t('Sale return (customer gave it back)', 'سیل واپسی (کسٹمر نے واپس کیا)')),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       instPrimaryButton(p, Loc.t('Share receipt (WhatsApp)', 'رسید بھیجیں (واٹس ایپ)'), _share, icon: Icons.share_outlined),
                     ]),
