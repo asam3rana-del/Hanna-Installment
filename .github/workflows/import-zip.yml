@@ -43,6 +43,20 @@ jobs:
             did=1
           done
           echo "did=$did" >> "$GITHUB_OUTPUT"
+          # Naya package (pubspec.yaml badla): pubspec.lock yahin dobara bana kar saath commit — Build ka lock check
+          # phir khud pass (haath se accept_new_lockfile / artifact ki zaroorat nahi).
+          if [ "$did" = "1" ] && ! git diff --quiet -- pubspec.yaml; then echo "lock=1" >> "$GITHUB_OUTPUT"; fi
+      - uses: subosito/flutter-action@v2
+        if: steps.unzip.outputs.lock == '1'
+        with:
+          flutter-version: '3.47.x'
+          channel: 'stable'
+          cache: true
+      - name: Refresh pubspec.lock
+        if: steps.unzip.outputs.lock == '1'
+        run: |
+          flutter pub get
+          git diff --stat -- pubspec.lock || true
       - name: Commit
         run: |
           git config user.name "import-bot"
