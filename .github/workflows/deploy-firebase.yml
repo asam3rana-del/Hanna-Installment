@@ -73,7 +73,23 @@ jobs:
           fi
           echo "Rules: $RULES_TYPE"
           cp "$GITHUB_WORKSPACE/firebase/firestore.indexes.json" firestore.indexes.json
-          cp -R "$GITHUB_WORKSPACE/web_installment" public
+          # Privacy site: web_installment/ (nayi zip ke saath). Na ho to repo ki tools/deploy_privacy_site.sh ke andar wale
+          # pages nikal lo (purani repo mein wahi hain). Rules / indexes deploy par ye folder zaroori nahi.
+          mkdir -p public
+          if [ -d "$GITHUB_WORKSPACE/web_installment" ]; then
+            cp -R "$GITHUB_WORKSPACE/web_installment/." public/
+          elif [ -f "$GITHUB_WORKSPACE/tools/deploy_privacy_site.sh" ]; then
+            python3 - "$GITHUB_WORKSPACE/tools/deploy_privacy_site.sh" <<'PYEOF'
+          import re, sys
+          s = open(sys.argv[1], encoding="utf-8").read()
+          for name, body in re.findall(r"cat > public/(\S+) <<'AHPOS_EOF'\n(.*?)\nAHPOS_EOF", s, re.S):
+              open("public/" + name, "w", encoding="utf-8").write(body + "\n")
+              print("page:", name)
+          PYEOF
+          fi
+          if [ "$WHAT" = "privacy" ] || [ "$WHAT" = "all" ]; then
+            [ -f public/privacy.html ] || { echo "::error::privacy.html nahi mila (web_installment / tools/deploy_privacy_site.sh)"; exit 1; }
+          fi
           printf '{\n  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },\n  "hosting": { "public": "public", "cleanUrls": false }\n}\n' > firebase.json
           case "$WHAT" in
             rules) ONLY="firestore:rules" ;;
