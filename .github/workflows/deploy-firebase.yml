@@ -4,6 +4,8 @@
 # GitHub repo > Settings > Secrets > Actions > New secret: FIREBASE_SERVICE_ACCOUNT (har dukaan ka alag project ho to
 # har dafa us dukaan ki key daal kar chalayein, ya secret ka naam badal kar). JSON file phone se mita dein.
 name: Deploy Firebase (rules + indexes)
+# what = privacy: web_installment/ (privacy policy + index) Firebase Hosting par -> https://<project>.web.app/privacy.html
+# (service account ko IAM mein 'Firebase Hosting Admin' role bhi chahiye).
 
 on:
   workflow_dispatch:
@@ -16,7 +18,7 @@ on:
         required: true
         default: both
         type: choice
-        options: [both, rules, indexes]
+        options: [both, rules, indexes, privacy, all]
       rules_type:
         description: 'Rules: pos = wahi jo POS par live chal rahi (branch_members); roles = cashier pabandi wali'
         required: true
@@ -71,14 +73,18 @@ jobs:
           fi
           echo "Rules: $RULES_TYPE"
           cp "$GITHUB_WORKSPACE/firebase/firestore.indexes.json" firestore.indexes.json
-          printf '{\n  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" }\n}\n' > firebase.json
+          cp -R "$GITHUB_WORKSPACE/web_installment" public
+          printf '{\n  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },\n  "hosting": { "public": "public", "cleanUrls": false }\n}\n' > firebase.json
           case "$WHAT" in
             rules) ONLY="firestore:rules" ;;
             indexes) ONLY="firestore:indexes" ;;
+            privacy) ONLY="hosting" ;;
+            all) ONLY="firestore:rules,firestore:indexes,hosting" ;;
             *) ONLY="firestore:rules,firestore:indexes" ;;
           esac
           firebase deploy --only "$ONLY" --project "$PROJECT" --non-interactive
           echo "Ho gaya. Indexes 5-15 minute mein 'Enabled' hote hain (Console > Firestore > Indexes)."
+          case "$WHAT" in privacy|all) echo "Privacy: https://$PROJECT.web.app/privacy.html" ;; esac
 
       - name: Remove key
         if: always()
