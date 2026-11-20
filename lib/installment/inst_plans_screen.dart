@@ -292,12 +292,10 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
 
   final _cash = TextEditingController();
   final _advance = TextEditingController();
-  final _profit = TextEditingController(); // kul qist qeemat
   final _count = TextEditingController(text: '12');
   final _lateFee = TextEditingController();
   final _grace = TextEditingController(); // form se hata diya: koi jurmana / riayat nahi
   final _note = TextEditingController();
-  String _profitMode = _modeTotal; // form sirf 'kul qeemat' leta hai
   String _freq = freqMonthly;
   int _roundTo = 10;
   String _advanceMethod = 'cash';
@@ -312,7 +310,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
 
   @override
   void dispose() {
-    for (final c in [_cash, _advance, _profit, _count, _lateFee, _grace, _note]) {
+    for (final c in [_cash, _advance, _count, _lateFee, _grace, _note]) {
       c.dispose();
     }
     super.dispose();
@@ -352,8 +350,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
 
   void _setItem(InstItem it) {
     setState(() {
-      _item = it;
-      _cash.text = it.cashPrice > 0 ? instPlain(it.cashPrice) : '';
+      _item = it; // sale price dukaandar khud likhta hai (pehle se nahi bharte)
     });
   }
 
@@ -377,19 +374,12 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
     });
   }
 
-  /// "Kul" mode (UI only): dukaandar seedha kul qist qeemat likhta hai (advance samet) — munafa = kul − naqd,
-  /// plan mein fixed (Rs) munafa ki tarah save. Baqi modes jaise hain.
-  static const _modeTotal = 'total';
-  String get _effMode => _profitMode == _modeTotal ? profitFixed : _profitMode;
-  double get _effProfit {
-    if (_profitMode != _modeTotal) return instParse(_profit.text);
-    final total = instParse(_profit.text);
-    final cash = instParse(_cash.text);
-    return total <= 0 ? 0 : total - cash;
-  }
+  /// Step 29: dukaandar seedha qist par sale price likhta hai (advance samet) — us mein munafa shamil hai, upar se
+  /// koi munafa nahi lagta. Asal munafa = sale price − khareed (item ki cost), reports isi se nikalti hain.
+  String get _effMode => profitFixed;
+  double get _effProfit => 0;
 
   PlanQuote? _quote() {
-    if (_profitMode == _modeTotal && instParse(_profit.text) <= 0) return null;
     try {
       return quotePlan(
         cashPrice: instParse(_cash.text),
@@ -405,9 +395,6 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
   }
 
   String? _quoteError() {
-    if (_profitMode == _modeTotal && instParse(_cash.text) > 0 && instParse(_profit.text) <= 0) {
-      return Loc.t('Write the total installment price.', 'کل قسط قیمت لکھیں۔');
-    }
     try {
       quotePlan(
         cashPrice: instParse(_cash.text),
@@ -625,7 +612,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: money,
                     onChanged: re,
-                    decoration: instDeco(p, Loc.t('Cash price', 'نقد قیمت'))),
+                    decoration: instDeco(p, Loc.t('Sale price (on installment)', 'قسط پر فروخت قیمت'))),
                 gap(),
                 TextField(
                     controller: _advance,
@@ -644,25 +631,6 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
                     onSelectionChanged: (s) => setState(() => _advanceMethod = s.first),
                   ),
                 ],
-                gap(),
-                // Sirf kul qist qeemat (advance samet) — munafa app khud nikalti hai (Step 28: %, Rs options hata diye).
-                TextField(
-                  controller: _profit,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: money,
-                  onChanged: re,
-                  decoration: instDeco(p, Loc.t('Total installment price', 'کل قسط قیمت')),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, left: 4),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                        Loc.t('Total the customer pays, advance included. Profit = total − cash price.',
-                            'کسٹمر کل کتنا دے گا (ایڈوانس سمیت)۔ منافع = کل − نقد قیمت۔'),
-                        style: TextStyle(color: p.textMuted, fontSize: 11)),
-                  ),
-                ),
                 gap(),
                 Row(children: [
                   Expanded(
@@ -871,12 +839,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
       padding: const EdgeInsets.all(14),
       decoration: instCard(p),
       child: Column(children: [
-        line(Loc.t('Cash price', 'نقد قیمت'), instRs(q.cashPrice)),
+        line(Loc.t('Sale price', 'فروخت قیمت'), instRs(q.totalPrice), bold: true),
         line(Loc.t('Advance', 'ایڈوانس'), instRs(q.advance)),
-        line(Loc.t('Remaining', 'باقی'), instRs(q.financed)),
-        line(Loc.t('Profit', 'منافع'), '+ ${instRs(q.profit)}', c: p.teal),
-        const Divider(),
-        line(Loc.t('Total installment price', 'کل قسط قیمت'), instRs(q.totalPrice), bold: true),
         line(Loc.t('To pay in installments', 'قسطوں میں'), instRs(q.installmentTotal)),
         const Divider(),
         line('${q.count} × ${Loc.t('installment', 'قسط')}', instRs(q.each), c: p.navy, bold: true),
@@ -884,7 +848,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
         line(Loc.t('First / last date', 'پہلی / آخری تاریخ'), '${_d(dates.first)}  →  ${_d(dates.last)}'),
         if (Session.isAdminOrManager && cost > 0) ...[
           const Divider(),
-          line(Loc.t('Total profit on cost', 'لاگت پر کل منافع'), instRs(q.totalPrice - cost),
+          line(Loc.t('Purchase (cost)', 'خرید'), instRs(cost)),
+          line(Loc.t('Profit (sale − purchase)', 'منافع (فروخت − خرید)'), instRs(q.totalPrice - cost),
               c: q.totalPrice >= cost ? p.teal : p.red),
         ],
       ]),

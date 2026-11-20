@@ -143,7 +143,7 @@ PlanQuote quotePlan({
   required int count,
   int roundTo = 1,
 }) {
-  if (!cashPrice.isFinite || cashPrice <= 0) throw ArgumentError('Cash price likhein.');
+  if (!cashPrice.isFinite || cashPrice <= 0) throw ArgumentError('Sale price likhein.');
   if (!advance.isFinite || advance < 0) throw ArgumentError('Advance minus nahi ho sakta.');
   if (advance >= cashPrice) throw ArgumentError('Advance poori qeemat ke barabar ya zyada hai — ye cash sale hai, qist nahi.');
   if (count < 1 || count > 60) throw ArgumentError('Qisten 1 se 60 tak.');
