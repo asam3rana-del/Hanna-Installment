@@ -111,7 +111,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _safePrint = await PrinterService.instance.safeMode();
     _compatPrint = await PrinterService.instance.compatibleMode();
     final m = await _repo.getSetting('login_method') ?? 'password';
-    if (mounted) setState(() => _loginMethod = const ['none', 'fingerprint', 'both', 'otp'].contains(m) ? m : 'password');
+    if (m == 'otp') {
+      // OTP login hata diya (staff server set nahi) — pehle se laga ho to password par wapas.
+      await _setLoginMethod('password');
+      return;
+    }
+    if (mounted) setState(() => _loginMethod = const ['none', 'fingerprint', 'both'].contains(m) ? m : 'password');
   }
 
   void _toast(String m) {
@@ -392,6 +397,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
   }
 
+  String _loginMethodLabel(String m) => switch (m) {
+        'fingerprint' => Loc.t('Fingerprint Only', 'صرف فنگر پرنٹ'),
+        'both' => Loc.t('Both (Password + Fingerprint)', 'دونوں (پاس ورڈ + فنگر پرنٹ)'),
+        'none' => Loc.t('No Password', 'بغیر پاس ورڈ'),
+        _ => Loc.t('Password Only', 'صرف پاس ورڈ'),
+      };
+
   Widget _card(String title, IconData icon, List<Widget> children) => Card(
         margin: const EdgeInsets.only(bottom: 14),
         child: Padding(
@@ -465,7 +477,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tf(_shopName, Loc.t('Shop Name', 'دکان کا نام')),
             _tf(_shopOwner, Loc.t('Owner Name', 'مالک کا نام')),
             _tf(_shopPhone, Loc.t('Phone', 'فون')),
-            _tf(_dueDays, Loc.t('Default credit period (days, 0 = off)', 'ڈیفالٹ ادھار مدت (دن، 0 = بند)'), number: true),
+            // Default credit period (POS udhaar) — qist app mein istemal nahi, chhupa diya; purani value save par wahi rehti hai.
+            if (_posFeatures) _tf(_dueDays, Loc.t('Default credit period (days, 0 = off)', 'ڈیفالٹ ادھار مدت (دن، 0 = بند)'), number: true),
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: TextField(
@@ -501,7 +514,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
         if (admin)
-          _card(Loc.t('Login Method', 'لاگ اِن کا طریقہ'), Icons.security, [
+          // Tap par khulta hai; band ho to sirf mojooda tareeqa dikhta hai.
+          Card(
+            margin: const EdgeInsets.only(bottom: 14),
+            clipBehavior: Clip.antiAlias,
+            child: ExpansionTile(
+              leading: Icon(Icons.security, color: ThemeManager.palette.navyInk),
+              title: Text(Loc.t('Login Method', 'لاگ اِن کا طریقہ'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              subtitle: Text(_loginMethodLabel(_loginMethod)),
+              childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              children: [
             RadioListTile<String>(
               value: 'password', groupValue: _loginMethod, onChanged: (v) => _setLoginMethod(v!),
               title: Text(Loc.t('Password Only', 'صرف پاس ورڈ')),
@@ -519,30 +541,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text(Loc.t('No Password', 'بغیر پاس ورڈ')),
               subtitle: Text(Loc.t('App opens directly once signed in', 'ایک بار لاگ اِن کے بعد ایپ سیدھی کھلے گی')),
             ),
-            RadioListTile<String>(
-              value: 'otp', groupValue: _loginMethod, onChanged: (v) => _setLoginMethod(v!),
-              title: Text(Loc.t('OTP (Phone Number)', 'OTP (فون نمبر)')),
-              subtitle: Text(Loc.t('Needs Cloud Sync Setup; staff phone in Manage Users', 'Cloud Sync Setup ضروری؛ اسٹاف کا فون Manage Users میں')),
-            ),
-          ]),
-        _card(Loc.t('Secure Cloud Login (staff)', 'سیکیور کلاؤڈ لاگ اِن (اسٹاف)'), Icons.verified_user, [
-          FutureBuilder<bool>(
-            future: StaffAuth.isEnabled(),
-            builder: (context, snap) => SwitchListTile(
-              value: snap.data ?? false,
-              onChanged: !Session.isAdmin
-                  ? null
-                  : (v) async {
-                      await StaffAuth.setEnabled(v);
-                      if (mounted) setState(() {});
-                    },
-              title: Text(Loc.t('Sign in to cloud with staff account', 'اسٹاف اکاؤنٹ سے کلاؤڈ میں سائن اِن')),
-              subtitle: Text(Loc.t(
-                  'OFF = current behaviour. ON needs the staff backend + App Check set up (see docs/STAFF_AUTH_BACKEND_SETUP.md); sync never falls back to anonymous.',
-                  'آف = موجودہ طریقہ۔ آن کے لیے اسٹاف بیک اینڈ + App Check سیٹ اپ ضروری ہے؛ سنک کبھی anonymous پر واپس نہیں جاتا۔')),
+              ],
             ),
           ),
-        ]),
         if (_posFeatures)
         _card(Loc.t('Credit limit override', 'کریڈٹ لیمٹ اجازت'), Icons.lock, [
           FutureBuilder<bool>(
@@ -581,12 +582,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ]),
-        _card(Loc.t('My Login', 'میرا لاگ اِن'), Icons.person, [
-          _tf(TextEditingController(text: Session.username ?? ''), Loc.t('Current Username', 'موجودہ یوزر نیم'), enabled: false),
-          _tf(_newUsername, Loc.t('New Username', 'نیا یوزر نیم')),
-          _tf(_newPassword, Loc.t('New Password', 'نیا پاس ورڈ'), obscure: true),
-          FilledButton(onPressed: _updateLogin, child: Text(Loc.t('UPDATE LOGIN', 'لاگ اِن اپڈیٹ کریں'))),
-        ]),
+        // Admin: Users (Manage Users) mein har user ka password / naam. Staff: sirf apna password (username nahi).
+        if (!admin)
+          _card(Loc.t('Change my password', 'اپنا پاس ورڈ بدلیں'), Icons.person, [
+            _tf(TextEditingController(text: Session.username ?? ''), Loc.t('Username', 'یوزر نیم'), enabled: false),
+            _tf(_newPassword, Loc.t('New Password', 'نیا پاس ورڈ'), obscure: true),
+            FilledButton(onPressed: _updateLogin, child: Text(Loc.t('CHANGE PASSWORD', 'پاس ورڈ بدلیں'))),
+          ]),
         _card(
           PrinterService.isDesktop
               ? Loc.t('Printer Setup (Windows / Network)', 'پرنٹر سیٹ اپ (ونڈوز / نیٹ ورک)')
@@ -608,7 +610,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 10),
             Expanded(child: OutlinedButton(onPressed: _testing ? null : _testPrint, child: Text(Loc.t('TEST PRINT', 'ٹیسٹ پرنٹ')))),
           ]),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
+          // Sasti 58mm printers par print kharab aaye tab ke liye — aam tor par band rehta hai.
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: Text(Loc.t('Print not coming right? (Advanced)', 'پرنٹ ٹھیک نہیں آ رہا؟ (ایڈوانس)'),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            children: [
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
@@ -639,6 +648,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           OutlinedButton(
             onPressed: _testing ? null : _testPrintText,
             child: Text(Loc.t('PLAIN TEXT TEST (English only)', 'سادہ ٹیکسٹ ٹیسٹ (صرف انگریزی)')),
+          ),
+          const SizedBox(height: 8),
+            ],
           ),
         ]),
         // Kotlin Settings mein Backup/Export row (BackupExportScreen ka apna RoleGuard admin/manager).

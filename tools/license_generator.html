@@ -53,6 +53,21 @@
     <button id="go">Key banayein</button>
     <div id="err" class="err"></div>
   </div>
+  <div class="card">
+    <label>Naya key pair (rotation) — sirf ek dafa</label>
+    <div style="font-size:12px;color:#667;margin-bottom:8px">Purani private key kisi ne dekh li ho to naya jora banayein. PRIVATE key file
+      save kar ke 2 jagah backup rakhein (kisi ko na dein). Sirf PUBLIC key developer ko bhejein. Naya public key app mein
+      lagne ke baad purani sab keys band — har customer ko nayi key deni hogi.</div>
+    <button class="sec" id="newPair">Naya key pair banao</button>
+    <div id="pairBox" style="display:none">
+      <label>PRIVATE key (kisi ko NA bhejein — file save karein)</label>
+      <textarea id="newPriv" rows="2" readonly></textarea>
+      <button class="sec" id="savePriv">Private key file save karein</button>
+      <label>PUBLIC key (sirf ye developer ko bhejein)</label>
+      <textarea id="newPub" rows="2" readonly></textarea>
+      <button class="sec" id="copyPub">Copy public key</button>
+    </div>
+  </div>
   <div class="card" id="result" style="display:none">
     <div class="ok" id="summary"></div>
     <label>License key (customer ko bhejein)</label>
@@ -165,6 +180,24 @@ if (typeof document !== "undefined") {
     try { const line = $("priv").value.trim().split(/\s+/).pop(); $("pubinfo").textContent = "Public key: " + b2hex(pubKey(hex2b(line))) + " (app ki license_keys.dart se milayein)"; }
     catch (e) { $("pubinfo").textContent = ""; }
   };
+  // Naya Ed25519 jora: 32 random bytes (browser ka crypto) = private seed; public = pubKey(seed).
+  $("newPair").onclick = () => {
+    if ($("pairBox").style.display !== "none" && !confirm("Naya jora phir se? Pichhla (agar save nahi kiya) zaya ho jayega.")) return;
+    const seed = new Uint8Array(32);
+    crypto.getRandomValues(seed);
+    $("newPriv").value = b2hex(seed);
+    $("newPub").value = b2hex(pubKey(seed));
+    $("pairBox").style.display = "";
+  };
+  $("savePriv").onclick = () => {
+    const text = "# Hanna Installment license PRIVATE key — kisi ko na dein, backup rakhein\n" + $("newPriv").value + "\n";
+    try {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+      a.download = "hanna-license-private-NEW.key";
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) { alert("File save nahi hui — private key ko lamba daba kar Copy karein aur kisi mehfooz note mein rakhein."); }
+  };
   let lastRec = "";
   $("go").onclick = () => {
     $("err").textContent = ""; $("result").style.display = "none";
@@ -214,6 +247,7 @@ if (typeof document !== "undefined") {
     }
   }
   $("copy").onclick = () => copyText($("out").value, $("copy"));
+  $("copyPub").onclick = () => copyText($("newPub").value, $("copyPub"));
   $("copyRec").onclick = () => copyText(lastRec, $("copyRec"));
 }
 

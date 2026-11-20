@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart' show BuildContext, ScaffoldMessenger, SnackBar, Text;
+import 'package:flutter/material.dart'
+    show BuildContext, Column, Icon, Icons, ListTile, MainAxisSize, Navigator, SafeArea, ScaffoldMessenger, SnackBar, Text, showModalBottomSheet;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
@@ -17,9 +18,11 @@ import '../services/whatsapp_sender.dart';
 import '../utils/loc.dart';
 import '../utils/pdf_urdu.dart';
 import '../utils/slip_pdf_data.dart' show slipFileName;
+import 'inst_csv.dart';
 import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
 import 'inst_repository.dart';
+import 'inst_terms.dart';
 import 'kyc_photo_store.dart';
 
 /// Qist ke PDF: (1) plan statement / agreement — customer + zamin ki tasveerein, CNIC, saman, schedule,
@@ -150,6 +153,8 @@ class InstPdf {
   static Future<Uint8List> _statement(PlanView v) async {
     await _assets();
     final shop = await loadShopHeader();
+    final terms = InstTerms.lines(await InstTerms.load());
+    final secs = await InstPlanRepository.instance.securities(v.plan.id);
     final repo = InstRepository.instance;
     final prof = await repo.profile(v.plan.customerId);
     final allG = await repo.guarantors(v.plan.customerId);
@@ -277,6 +282,27 @@ class InstPdf {
             _kv(_d(pay.paidAt),
                 '${pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : (pay.kind == payDiscount ? Loc.t('Discount', 'رعایت') : Loc.t('Qist', 'قسط'))}  ${_rs(pay.amount)}'
                 '${pay.fine > 0 ? '  + ${Loc.t('fine', 'جرمانہ')} ${_rs(pay.fine)}' : ''}  (${pay.method})'),
+        ],
+        if (secs.isNotEmpty) ...[
+          _section(Loc.t('Security documents', 'ضمانت کے کاغذات')),
+          for (final sc in secs)
+            _kv(
+                sc.kind == securityCheque
+                    ? Loc.t('Cheque', 'چیک')
+                    : (sc.kind == securityStamp ? Loc.t('Stamp paper', 'اسٹامپ پیپر') : Loc.t('Document', 'کاغذ')),
+                [
+                  if (sc.number.isNotEmpty) '#${sc.number}',
+                  if (sc.bank.isNotEmpty) sc.bank,
+                  if (sc.amount > 0) _rs(sc.amount),
+                  if (sc.note.isNotEmpty) sc.note,
+                  sc.returned ? '${Loc.t('returned', 'واپس')} ${_d(sc.returnedAt)}' : Loc.t('with shop', 'دکان کے پاس'),
+                ].join('  •  ')),
+        ],
+        if (terms.isNotEmpty) ...[
+          _section(Loc.t('Terms / agreement', 'شرائط / اقرار نامہ')),
+          for (final line in terms) pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 1.5), child: _t(line, size: 9.5)),
+          pw.SizedBox(height: 4),
+          _t(Loc.t('We have read and accept the above terms.', 'ہم نے اوپر دی گئی شرائط پڑھ کر قبول کیں۔'), size: 9, argb: 0xFF8A90A6),
         ],
         pw.SizedBox(height: 26),
         pw.Row(children: [
@@ -467,7 +493,35 @@ class InstPdf {
     List<int>? flex,
     Set<int> right = const {},
   }) async {
+    // Step 25: PDF ya Excel (CSV).
+    final fmt = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.picture_as_pdf_outlined),
+            title: Text(Loc.t('PDF (print / WhatsApp)', 'PDF (پرنٹ / واٹس ایپ)')),
+            onTap: () => Navigator.pop(ctx, 'pdf'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.table_chart_outlined),
+            title: Text(Loc.t('Excel (CSV)', 'ایکسل (CSV)')),
+            onTap: () => Navigator.pop(ctx, 'csv'),
+          ),
+        ]),
+      ),
+    );
+    if (fmt == null || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    if (fmt == 'csv') {
+      try {
+        await InstCsv.share(base: base, text: csvText(title: title, sub: sub, summary: summary, headers: headers, rows: rows));
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(Loc.t('File could not be made: $e', 'فائل نہ بن سکی: $e'))));
+      }
+      return;
+    }
     messenger.showSnackBar(SnackBar(content: Text(Loc.t('Making PDF...', 'PDF بن رہی ہے...'))));
     final bytes = await tableBytes(title: title, sub: sub, summary: summary, headers: headers, rows: rows, flex: flex, right: right);
     if (!context.mounted) return;

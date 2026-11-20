@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/party.dart';
 import '../services/party_photo_store.dart';
+import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
@@ -153,7 +154,9 @@ class _InstCustomersScreenState extends State<InstCustomersScreen> {
             ]),
           ),
           const SizedBox(width: 8),
-          if (prof == null)
+          if (prof != null && prof.isBlocked)
+            _badge(p, Loc.t('Blacklist', 'بلیک لسٹ'), p.red)
+          else if (prof == null)
             _badge(p, Loc.t('No CNIC', 'کارڈ نہیں'), p.textMuted)
           else if (r.guarantorCount == 0)
             _badge(p, Loc.t('No guarantor', 'ضامن نہیں'), p.red)
@@ -429,6 +432,47 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
     await _reload();
   }
 
+  /// Blacklist lagao / hatao (admin / manager).
+  Future<void> _toggleBlock() async {
+    final blocked = _p?.isBlocked ?? false;
+    final reason = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(blocked ? Loc.t('Remove from blacklist?', 'بلیک لسٹ سے ہٹائیں؟') : Loc.t('Blacklist customer', 'کسٹمر بلیک لسٹ کریں')),
+        content: blocked
+            ? Text('${Loc.t('Reason', 'وجہ')}: ${_p!.blockedReason}')
+            : Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(Loc.t('A new installment for this customer will need Admin / Manager approval.',
+                    'اس کسٹمر کی نئی قسط صرف ایڈمن / مینیجر کی اجازت سے بنے گی۔')),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: reason,
+                    autofocus: true,
+                    decoration: InputDecoration(hintText: Loc.t('Reason (e.g. stopped paying)', 'وجہ (مثلاً قسط بند کر دی)'))),
+              ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Cancel', 'منسوخ'))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(blocked ? Loc.t('Remove', 'ہٹائیں') : Loc.t('Blacklist', 'بلیک لسٹ'))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final text = blocked ? '' : reason.text.trim();
+    if (!blocked && text.isEmpty) {
+      if (mounted) instToast(context, Loc.t('Write a reason.', 'وجہ لکھیں۔'));
+      return;
+    }
+    try {
+      await InstRepository.instance.setBlocked(widget.customerId, text);
+      await _reload();
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
+  }
+
   Future<void> _call(String phone) async {
     final d = phone.replaceAll(RegExp(r'[^0-9+]'), '');
     if (d.isEmpty) return;
@@ -450,6 +494,11 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
           c?.name ?? Loc.t('Customer', 'کسٹمر'),
           _p == null || _p!.fatherName.isEmpty ? '' : '${Loc.t('s/o', 'ولد')} ${_p!.fatherName}',
           actions: [
+            if (c != null && Session.isAdminOrManager)
+              IconButton(
+                  tooltip: Loc.t('Blacklist', 'بلیک لسٹ'),
+                  icon: Icon((_p?.isBlocked ?? false) ? Icons.lock_open : Icons.block, color: Colors.white),
+                  onPressed: _toggleBlock),
             if (c != null)
               IconButton(tooltip: Loc.t('Edit', 'تبدیلی'), icon: const Icon(Icons.edit_outlined, color: Colors.white), onPressed: _edit),
           ],
@@ -460,6 +509,20 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
               : c == null
                   ? Center(child: Text(Loc.t('Customer not found.', 'کسٹمر نہیں ملا۔'), style: TextStyle(color: p.textMuted)))
                   : ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 40), children: [
+                      if (_p?.isBlocked ?? false)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: p.red.withOpacity(0.12), borderRadius: BorderRadius.circular(14)),
+                          child: Row(children: [
+                            Icon(Icons.block, color: p.red),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text('${Loc.t('BLACKLISTED', 'بلیک لسٹ')}: ${_p!.blockedReason}',
+                                  style: TextStyle(color: p.red, fontWeight: FontWeight.bold)),
+                            ),
+                          ]),
+                        ),
                       _profileCard(p, c),
                       const SizedBox(height: 12),
                       if (c.phone.isNotEmpty)
@@ -907,4 +970,35 @@ class KycPhotoRow extends StatelessWidget {
       ]),
     );
   }
+}
+
+
+/// Naye qist plan se pehle (Step 18): blacklist / pehle saman wapas => warning. Blacklist customer ka plan
+/// sirf Admin / Manager bana sakta hai. Wapas true = aage barhein.
+Future<bool> instRiskCheck(BuildContext context, int customerId, {List<int> guarantorIds = const []}) async {
+  final r = await InstRepository.instance.risk(customerId);
+  final gIssues = await InstRepository.instance.guarantorRisks(guarantorIds);
+  if ((r == null && gIssues.isEmpty) || !context.mounted) return true;
+  final blocked = r?.blocked ?? false;
+  final canGo = !blocked || Session.isAdminOrManager;
+  final lines = [
+    if (blocked) '${Loc.t('BLACKLISTED', 'بلیک لسٹ')}: ${r!.blockedReason}',
+    if ((r?.repossessed ?? 0) > 0)
+      Loc.t('Item was taken back ${r!.repossessed} time(s) before.', 'پہلے ${r!.repossessed} دفعہ سامان واپس لیا گیا۔'),
+    for (final g in gIssues) '${Loc.t('Guarantor', 'ضامن')} — $g',
+    if (!canGo) Loc.t('Only Admin / Manager can make a plan for this customer.', 'اس کسٹمر کا پلان صرف ایڈمن / مینیجر بنا سکتا ہے۔'),
+  ];
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 36),
+      title: Text(Loc.t('Risky customer', 'خطرناک کسٹمر')),
+      content: Text(lines.map((e) => '•  $e').join('\n')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Go back', 'واپس'))),
+        if (canGo) TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(Loc.t('Continue anyway', 'پھر بھی جاری'))),
+      ],
+    ),
+  );
+  return go == true;
 }

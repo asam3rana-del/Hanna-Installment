@@ -476,6 +476,82 @@ class InstPlanRepository {
     _changed();
   }
 
+  // ================================================================ security (Step 21)
+
+  /// Plan ke saath liye gaye cheque / stamp paper.
+  Future<List<InstSecurity>> securities(int planId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query('inst_securities', where: 'planId = ?', whereArgs: [planId], orderBy: 'id');
+    return rows.map(InstSecurity.fromMap).toList();
+  }
+
+  Future<void> addSecurity(int planId, {required String kind, String number = '', String bank = '', double amount = 0, String note = ''}) async {
+    await LicenseService.instance.requireWritable();
+    if (!securityKinds.contains(kind)) throw ArgumentError('Qisam chunein.');
+    if (!amount.isFinite || amount < 0) throw ArgumentError('Raqam theek nahi.');
+    if (kind == securityCheque && number.trim().isEmpty) throw ArgumentError('Cheque number likhein.');
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) async {
+      await txn.insert('inst_securities', {
+        'planId': planId,
+        'kind': kind,
+        'number': number.trim(),
+        'bank': bank.trim(),
+        'amount': amount,
+        'note': note.trim(),
+        'returnedAt': 0,
+        'createdAt': _now(),
+      });
+      await InstSync.enqueuePlan(txn, planId);
+    });
+    _changed();
+  }
+
+  /// Customer ko wapas diya ([back] = true) / ghalti se wapas likha tha to dobara dukaan ke paas.
+  Future<void> setSecurityReturned(InstSecurity sec, bool back) async {
+    await LicenseService.instance.requireWritable();
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) async {
+      await txn.update('inst_securities', {'returnedAt': back ? _now() : 0}, where: 'id = ?', whereArgs: [sec.id]);
+      await InstSync.enqueuePlan(txn, sec.planId);
+    });
+    _changed();
+  }
+
+  Future<void> deleteSecurity(InstSecurity sec) async {
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager hata sakta hai.');
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('inst_securities', where: 'id = ?', whereArgs: [sec.id]);
+      await InstSync.enqueuePlan(txn, sec.planId);
+    });
+    _changed();
+  }
+
+  /// Dukaan ke paas pare sab cheque / kaghzat (wapas nahi diye), plan aur customer ke saath. Band plan pehle
+  /// (un ke kaghzat wapas karne hain).
+  Future<List<SecurityRow>> heldSecurities() async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.rawQuery('''
+      SELECT s.*, p.planNo AS planNo, p.status AS planStatus, c.name AS customerName, c.phone AS customerPhone
+      FROM inst_securities s
+      JOIN inst_plans p ON p.id = s.planId
+      LEFT JOIN customers c ON c.id = p.customerId
+      WHERE s.returnedAt = 0
+      ORDER BY CASE WHEN p.status = '$planActive' THEN 1 ELSE 0 END, s.createdAt DESC
+    ''');
+    return [
+      for (final r in rows)
+        SecurityRow(
+          security: InstSecurity.fromMap(r),
+          planNo: (r['planNo'] as String?) ?? '',
+          planStatus: (r['planStatus'] as String?) ?? '',
+          customerName: (r['customerName'] as String?) ?? '',
+          customerPhone: (r['customerPhone'] as String?) ?? '',
+        ),
+    ];
+  }
+
   // ================================================================ close
 
   /// Ghalat bana plan mitao (sirf admin; advance ke ilawa koi qist na li ho). Item wapas stock, advance ki cash row bhi.
@@ -498,11 +574,118 @@ class InstPlanRepository {
       await InstSync.enqueueDeleteRow(txn, instPlanType, 'inst_plans', 'id', planId);
       await txn.delete('inst_payments', where: 'planId = ?', whereArgs: [planId]);
       await txn.delete('inst_schedule', where: 'planId = ?', whereArgs: [planId]);
+      await txn.delete('inst_securities', where: 'planId = ?', whereArgs: [planId]);
       await txn.delete('inst_plans', where: 'id = ?', whereArgs: [planId]);
       await txn.update('inst_items', {'status': itemInStock, 'updatedAt': _now()}, where: 'id = ?', whereArgs: [itemId]);
       await InstSync.enqueueItem(txn, itemId);
     });
     _changed();
+  }
+
+  /// Qisten dobara banana (Step 17, admin / manager). Ada hissa wahi, baqi + [extra] (izafi charge = munafa)
+  /// [count] nayi qiston mein [firstDue] se. Plan ki ginti / waqfa / kul raqam / munafa bhi badalte hain; note mein record.
+  Future<void> reschedule(int planId,
+      {required int count, required int firstDue, required String frequency, double extra = 0, String note = ''}) async {
+    await LicenseService.instance.requireWritable();
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager qisten badal sakta hai.');
+    if (extra < 0) throw ArgumentError('Izafi raqam minus nahi ho sakti.');
+    final v = await view(planId);
+    if (v == null) throw ArgumentError('Plan nahi mila.');
+    if (!v.plan.isActive) throw ArgumentError('Sirf chalta hua plan.');
+    final paid = v.payments.where((x) => x.kind == payInstallment || x.kind == payDiscount).fold<double>(0, (a, x) => a + x.amount);
+    final lines = rescheduleLines(
+        schedule: v.schedule, paid: paid, count: count, firstDue: firstDue, frequency: frequency, extra: extra, roundTo: v.plan.roundTo);
+    final x = (extra * 100).roundToDouble() / 100;
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('inst_schedule', where: 'planId = ?', whereArgs: [planId]);
+      for (var i = 0; i < lines.length; i++) {
+        await txn.insert('inst_schedule', {'planId': planId, 'seq': i + 1, 'dueDate': lines[i].$1, 'amount': lines[i].$2});
+      }
+      final rec = 'Qisten badli ${_fmtDay(_now())}: $count x $frequency${x > 0 ? ', izafi ${x.round()}' : ''}'
+          '${note.trim().isEmpty ? '' : ' — ${note.trim()}'}';
+      await txn.update(
+          'inst_plans',
+          {
+            'count': lines.length,
+            'frequency': frequency,
+            'firstDueDate': lines.first.$1,
+            'installmentTotal': v.plan.installmentTotal + x,
+            'totalPrice': v.plan.totalPrice + x,
+            'profit': v.plan.profit + x,
+            'note': [v.plan.note, rec].where((t) => t.isNotEmpty).join('\n'),
+            'updatedAt': _now(),
+          },
+          where: 'id = ?',
+          whereArgs: [planId]);
+      await InstSync.enqueuePlan(txn, planId);
+    });
+    _changed();
+  }
+
+  /// Saman badalna (Step 24, admin / manager): customer purana piece wapas deta hai, naya leta hai. Ada raqam wahi,
+  /// baqi + [priceDiff] (naya mehnga = plus, sasta = minus) [count] nayi qiston mein. Purana piece `returned`
+  /// (check kar ke "dobara stock" karein), naya `sold`. Khareed qeemat badalne se munafa bhi theek hota hai.
+  Future<void> exchange(int planId,
+      {required int newItemId, required double priceDiff, required int count, required int firstDue, String note = ''}) async {
+    await LicenseService.instance.requireWritable();
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager saman badal sakta hai.');
+    final v = await view(planId);
+    if (v == null) throw ArgumentError('Plan nahi mila.');
+    if (!v.plan.isActive) throw ArgumentError('Sirf chalta hua plan.');
+    if (newItemId == v.plan.itemId) throw ArgumentError('Naya piece chunein.');
+    final db = await AppDatabase.instance.database;
+    final nr = await db.query('inst_items', where: 'id = ?', whereArgs: [newItemId], limit: 1);
+    if (nr.isEmpty) throw ArgumentError('Naya piece nahi mila.');
+    final newItem = InstItem.fromMap(nr.first);
+    if (!newItem.inStock) throw ArgumentError('Ye piece stock mein nahi.');
+    final paid = v.payments.where((x) => x.kind == payInstallment || x.kind == payDiscount).fold<double>(0, (a, x) => a + x.amount);
+    final lines = rescheduleLines(
+        schedule: v.schedule,
+        paid: paid,
+        count: count,
+        firstDue: firstDue,
+        frequency: v.plan.frequency,
+        extra: priceDiff,
+        roundTo: v.plan.roundTo);
+    final d = (priceDiff * 100).roundToDouble() / 100;
+    final costDiff = newItem.costPrice - v.plan.costPrice;
+    final oldItemId = v.plan.itemId;
+    await db.transaction((txn) async {
+      await txn.delete('inst_schedule', where: 'planId = ?', whereArgs: [planId]);
+      for (var i = 0; i < lines.length; i++) {
+        await txn.insert('inst_schedule', {'planId': planId, 'seq': i + 1, 'dueDate': lines[i].$1, 'amount': lines[i].$2});
+      }
+      final rec = 'Saman badla ${_fmtDay(_now())}: ${v.itemTitle} -> ${newItem.title.isEmpty ? newItem.model : newItem.title}'
+          ' (farq ${d.round()})${note.trim().isEmpty ? '' : ' — ${note.trim()}'}';
+      await txn.update(
+          'inst_plans',
+          {
+            'itemId': newItemId,
+            'costPrice': newItem.costPrice,
+            'cashPrice': v.plan.cashPrice + d,
+            'totalPrice': v.plan.totalPrice + d,
+            'installmentTotal': v.plan.installmentTotal + d,
+            'profit': v.plan.profit + d - costDiff,
+            'count': lines.length,
+            'firstDueDate': lines.first.$1,
+            'note': [v.plan.note, rec].where((t) => t.isNotEmpty).join('\n'),
+            'updatedAt': _now(),
+          },
+          where: 'id = ?',
+          whereArgs: [planId]);
+      await txn.update('inst_items', {'status': itemReturned, 'updatedAt': _now()}, where: 'id = ?', whereArgs: [oldItemId]);
+      await txn.update('inst_items', {'status': itemSold, 'updatedAt': _now()}, where: 'id = ?', whereArgs: [newItemId]);
+      await InstSync.enqueueItem(txn, oldItemId);
+      await InstSync.enqueueItem(txn, newItemId);
+      await InstSync.enqueuePlan(txn, planId);
+    });
+    _changed();
+  }
+
+  static String _fmtDay(int ms) {
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    return '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
   }
 
   /// Qist na dene par saman wapas liya (admin / manager). Plan band (`repossessed`), item `repossessed`.
@@ -610,6 +793,30 @@ class InstPlanRepository {
     return profitReport(payments: pays, expenses: ex, from: from, to: to, cashSales: cs, keptOnReturns: kept);
   }
 
+  /// Dashboard chart (Step 26): pichhle [months] mahine — sale (qist plan ki kul qeemat + naqd sale), wasooli
+  /// (qist / advance / fine + naqd sale, discount nahi) aur munafa (profit report ka realized).
+  Future<List<MonthPoint>> monthlyTrend({int months = 6, DateTime? now}) async {
+    final db = await AppDatabase.instance.database;
+    final starts = monthStarts(now ?? DateTime.now(), months);
+    final out = <MonthPoint>[];
+    for (var i = 0; i < starts.length; i++) {
+      final from = starts[i];
+      final d = DateTime.fromMillisecondsSinceEpoch(from);
+      final to = DateTime(d.year, d.month + 1, 1).millisecondsSinceEpoch;
+      double num0(List<Map<String, Object?>> r) => ((r.first['v'] as num?) ?? 0).toDouble();
+      final planSale = num0(await db.rawQuery(
+          'SELECT COALESCE(SUM(totalPrice), 0) AS v FROM inst_plans WHERE createdAt >= ? AND createdAt < ?', [from, to]));
+      final cash = num0(await db.rawQuery(
+          'SELECT COALESCE(SUM(price - COALESCE(refund, 0)), 0) AS v FROM inst_cash_sales WHERE soldAt >= ? AND soldAt < ?', [from, to]));
+      final got = num0(await db.rawQuery(
+          "SELECT COALESCE(SUM(amount + fine), 0) AS v FROM inst_payments WHERE paidAt >= ? AND paidAt < ? AND kind != '$payDiscount'",
+          [from, to]));
+      final pr = await profit(from: from, to: to);
+      out.add(MonthPoint(monthStart: from, sale: planSale + cash, collected: got + cash, profit: pr.realizedProfit));
+    }
+    return out;
+  }
+
   // ================================================================ home
 
   Future<InstCollectionStats> collectionStats({int? today}) async {
@@ -662,4 +869,84 @@ class InstCollectionStats {
     this.receivable = 0,
     this.collectedToday = 0,
   });
+}
+
+
+// ================================================================ security models (Step 21)
+
+const securityCheque = 'cheque';
+const securityStamp = 'stamp';
+const securityOther = 'other';
+const securityKinds = <String>[securityCheque, securityStamp, securityOther];
+
+/// Plan ki zamanat: cheque / stamp paper / koi aur kaghaz.
+class InstSecurity {
+  final int id;
+  final int planId;
+  final String kind;
+  final String number;
+  final String bank;
+  final double amount;
+  final String note;
+  final int returnedAt;
+  final int createdAt;
+  const InstSecurity({
+    required this.id,
+    required this.planId,
+    required this.kind,
+    this.number = '',
+    this.bank = '',
+    this.amount = 0,
+    this.note = '',
+    this.returnedAt = 0,
+    this.createdAt = 0,
+  });
+
+  bool get returned => returnedAt > 0;
+
+  factory InstSecurity.fromMap(Map<String, Object?> m) => InstSecurity(
+        id: ((m['id'] as num?) ?? 0).toInt(),
+        planId: ((m['planId'] as num?) ?? 0).toInt(),
+        kind: (m['kind'] as String?) ?? securityCheque,
+        number: (m['number'] as String?) ?? '',
+        bank: (m['bank'] as String?) ?? '',
+        amount: ((m['amount'] as num?) ?? 0).toDouble(),
+        note: (m['note'] as String?) ?? '',
+        returnedAt: ((m['returnedAt'] as num?) ?? 0).toInt(),
+        createdAt: ((m['createdAt'] as num?) ?? 0).toInt(),
+      );
+}
+
+class SecurityRow {
+  final InstSecurity security;
+  final String planNo;
+  final String planStatus;
+  final String customerName;
+  final String customerPhone;
+  const SecurityRow({
+    required this.security,
+    required this.planNo,
+    required this.planStatus,
+    required this.customerName,
+    required this.customerPhone,
+  });
+
+  /// Plan band (mukammal / wapas) magar kaghaz abhi dukaan ke paas — customer ko lautana hai.
+  bool get shouldReturn => planStatus != planActive;
+}
+
+
+// ================================================================ trend (Step 26)
+
+/// Pichhle [n] mahinon ki pehli tareekh (purana pehle, aakhri = is mahine).
+List<int> monthStarts(DateTime now, int n) => [
+      for (var i = n - 1; i >= 0; i--) DateTime(now.year, now.month - i, 1).millisecondsSinceEpoch,
+    ];
+
+class MonthPoint {
+  final int monthStart;
+  final double sale;
+  final double collected;
+  final double profit;
+  const MonthPoint({required this.monthStart, required this.sale, required this.collected, required this.profit});
 }

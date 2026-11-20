@@ -7,6 +7,7 @@ import '../services/session.dart';
 import '../db/party_repository.dart';
 import '../models/party.dart';
 import 'inst_models.dart';
+import 'inst_plan_math.dart' show parseIdList;
 import 'inst_reports.dart';
 import 'inst_sync.dart';
 
@@ -142,6 +143,73 @@ class InstRepository {
       }
       await InstSync.enqueueProfile(txn, customerId);
     });
+  }
+
+  /// Blacklist (Step 18, admin / manager). [reason] khali = block hatao. Profile na ho to ban jati hai.
+  Future<void> setBlocked(int customerId, String reason) async {
+    await LicenseService.instance.requireWritable();
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager customer block kar sakta hai.');
+    final r = reason.trim();
+    final db = await AppDatabase.instance.database;
+    final now = _now();
+    await db.transaction((txn) async {
+      final values = {'blockedReason': r, 'blockedAt': r.isEmpty ? 0 : now, 'updatedAt': now};
+      final n = await txn.update('customer_profiles', values, where: 'customerId = ?', whereArgs: [customerId]);
+      if (n == 0) await txn.insert('customer_profiles', {...values, 'customerId': customerId, 'createdAt': now});
+      await InstSync.enqueueProfile(txn, customerId);
+    });
+    _changed();
+  }
+
+  /// Naya plan / naqd sale se pehle: block ki wajah aur kitni dafa saman wapas liya gaya. Sab theek => null.
+  Future<CustomerRisk?> risk(int customerId) async {
+    final db = await AppDatabase.instance.database;
+    final p = await profile(customerId);
+    final repo = Sqflite.firstIntValue(await db.rawQuery(
+            "SELECT COUNT(*) FROM inst_plans WHERE customerId = ? AND status = 'repossessed'", [customerId])) ??
+        0;
+    final r = CustomerRisk(blockedReason: p?.blockedReason.trim() ?? '', repossessed: repo);
+    return r.any ? r : null;
+  }
+
+  /// Zamin ki jaanch (Step 23): chune gaye zamin ka CNIC kisi blacklist / saman-wapas customer ka to nahi, ya woh
+  /// pehle kisi aise plan ka zamin to nahi jis ka saman wapas liya gaya. Wapas: har masle ki ek line.
+  Future<List<String>> guarantorRisks(List<int> guarantorIds) async {
+    if (guarantorIds.isEmpty) return const [];
+    final db = await AppDatabase.instance.database;
+    final picked = [
+      for (final r in await db.query('inst_guarantors', where: 'id IN (${guarantorIds.map((_) => '?').join(',')})', whereArgs: guarantorIds))
+        Guarantor.fromMap(r)
+    ];
+    final profiles = await db.rawQuery('''
+      SELECT p.customerId AS cid, p.cnic AS cnic, p.blockedReason AS reason, c.name AS name,
+        (SELECT COUNT(*) FROM inst_plans x WHERE x.customerId = p.customerId AND x.status = 'repossessed') AS rep
+      FROM customer_profiles p JOIN customers c ON c.id = p.customerId WHERE p.cnic != ''
+    ''');
+    final allG = await db.query('inst_guarantors', columns: ['id', 'cnic']);
+    final repoPlans = await db.query('inst_plans', columns: ['guarantorIds', 'planNo'], where: "status = 'repossessed'");
+    final out = <String>[];
+    for (final g in picked) {
+      final d = cnicDigits(g.cnic);
+      if (d.length != 13) continue;
+      for (final r in profiles) {
+        if (cnicDigits((r['cnic'] as String?) ?? '') != d) continue;
+        final reason = ((r['reason'] as String?) ?? '').trim();
+        final rep = ((r['rep'] as num?) ?? 0).toInt();
+        if (reason.isNotEmpty) out.add('${g.name}: blacklist customer "${r['name']}" ($reason)');
+        if (rep > 0) out.add('${g.name}: customer "${r['name']}" se $rep dafa saman wapas liya gaya');
+      }
+      final sameIds = {
+        for (final x in allG)
+          if (cnicDigits((x['cnic'] as String?) ?? '') == d) ((x['id'] as num?) ?? 0).toInt()
+      };
+      final bad = <String>[];
+      for (final pl in repoPlans) {
+        if (parseIdList((pl['guarantorIds'] as String?) ?? '').any(sameIds.contains)) bad.add((pl['planNo'] as String?) ?? '');
+      }
+      if (bad.isNotEmpty) out.add('${g.name}: pehle zamin tha, saman wapas liya gaya (${bad.join(', ')})');
+    }
+    return out;
   }
 
   // ================================================================ guarantors
@@ -512,4 +580,14 @@ class PriceChange {
       changedAt: ((m['changedAt'] as num?) ?? 0).toInt(),
     );
   }
+}
+
+
+/// Customer ka khatra (Step 18): block ki wajah / pehle saman wapas.
+class CustomerRisk {
+  final String blockedReason;
+  final int repossessed;
+  const CustomerRisk({required this.blockedReason, required this.repossessed});
+  bool get blocked => blockedReason.isNotEmpty;
+  bool get any => blocked || repossessed > 0;
 }

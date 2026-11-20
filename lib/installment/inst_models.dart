@@ -326,6 +326,12 @@ class CustomerProfile {
   final int createdAt;
   final int updatedAt;
 
+  /// Blacklist (v45): khali nahi = customer block (wajah). Sirf [InstRepository.setBlocked] likhta hai —
+  /// [toMap] mein nahi, taake profile edit karne se block na hatay.
+  final String blockedReason;
+  final int blockedAt;
+  bool get isBlocked => blockedReason.trim().isNotEmpty;
+
   const CustomerProfile({
     required this.customerId,
     this.fatherName = '',
@@ -338,6 +344,8 @@ class CustomerProfile {
     this.note = '',
     this.createdAt = 0,
     this.updatedAt = 0,
+    this.blockedReason = '',
+    this.blockedAt = 0,
   });
 
   Map<String, Object?> toMap() => {
@@ -366,6 +374,8 @@ class CustomerProfile {
         note: (m['note'] as String?) ?? '',
         createdAt: ((m['createdAt'] as num?) ?? 0).toInt(),
         updatedAt: ((m['updatedAt'] as num?) ?? 0).toInt(),
+        blockedReason: (m['blockedReason'] as String?) ?? '',
+        blockedAt: ((m['blockedAt'] as num?) ?? 0).toInt(),
       );
 }
 

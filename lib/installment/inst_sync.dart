@@ -86,6 +86,8 @@ class InstSync {
       for (final k in const ['fatherName', 'cnic', 'phone2', 'address', 'occupation', 'workAddress', 'note']) k: _s(p[k]),
       'monthlyIncome': _d(p['monthlyIncome']),
       'createdAt': _i(p['createdAt']),
+      'blockedReason': _s(p['blockedReason']),
+      'blockedAt': _i(p['blockedAt']),
     }));
   }
 
@@ -187,6 +189,15 @@ class InstSync {
       for (final r in await ex.query('inst_schedule', where: 'planId = ?', whereArgs: [id], orderBy: 'seq'))
         {'seq': _i(r['seq']), 'dueDate': _i(r['dueDate']), 'amount': _d(r['amount'])}
     ];
+    final secs = [
+      for (final r in await ex.query('inst_securities', where: 'planId = ?', whereArgs: [id], orderBy: 'id'))
+        {
+          for (final k in const ['kind', 'number', 'bank', 'note']) k: _s(r[k]),
+          'amount': _d(r['amount']),
+          'returnedAt': _i(r['returnedAt']),
+          'createdAt': _i(r['createdAt']),
+        }
+    ];
     final eid = _own('inst_plan:', p);
     await _stampServerId(ex, 'inst_plans', 'id', id, eid);
     await SyncQueueHelper.enqueue(ex, instPlanType, eid, 'upsert', _stamp({
@@ -195,6 +206,7 @@ class InstSync {
       'itemServerId': isid,
       'guarantorServerIds': gIds,
       'schedule': sched,
+      'securities': secs,
       for (final k in const ['planNo', 'profitMode', 'frequency', 'status', 'note', 'createdBy']) k: _s(p[k]),
       for (final k in const ['cashPrice', 'costPrice', 'advance', 'profitValue', 'profit', 'totalPrice', 'installmentTotal', 'lateFee'])
         k: _d(p[k]),
@@ -559,6 +571,8 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
     final values = <String, Object?>{
       for (final k in const ['fatherName', 'cnic', 'phone2', 'address', 'occupation', 'workAddress', 'note']) k: _s(d[k]),
       'monthlyIncome': _d(d['monthlyIncome']),
+      'blockedReason': _s(d['blockedReason']),
+      'blockedAt': _i(d['blockedAt']),
       'updatedAt': _i(d['updatedAt']),
       'serverId': sid,
     };
@@ -684,6 +698,21 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
         if (s is! Map) continue;
         await db.insert('inst_schedule', {'planId': planId, 'seq': _i(s['seq']), 'dueDate': _i(s['dueDate']), 'amount': _d(s['amount'])},
             conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    }
+    // Security cheque / kaghzat (v46): purane doc mein field nahi hota => local wahi rehte hain.
+    final secs = d['securities'];
+    if (secs is List) {
+      await db.delete('inst_securities', where: 'planId = ?', whereArgs: [planId]);
+      for (final s in secs) {
+        if (s is! Map) continue;
+        await db.insert('inst_securities', {
+          'planId': planId,
+          for (final k in const ['kind', 'number', 'bank', 'note']) k: _s(s[k]),
+          'amount': _d(s['amount']),
+          'returnedAt': _i(s['returnedAt']),
+          'createdAt': _i(s['createdAt']),
+        });
       }
     }
   }

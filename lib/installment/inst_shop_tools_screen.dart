@@ -15,6 +15,7 @@ import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
 import 'inst_ui.dart';
+import 'inst_terms.dart';
 import 'inst_update.dart';
 
 /// Step 5: POS ki sirf woh screens jo qist ki dukaan ko chahiye (cash, kharche, day book, workers, kiraya,
@@ -36,6 +37,7 @@ class InstShopToolsScreen extends StatelessWidget {
       if (mgr) (Icons.badge_outlined, Loc.t('Workers', 'ورکرز'), Loc.t('Salary, advance, leave', 'تنخواہ، ایڈوانس، چھٹی'), p.purple, () => const WorkersScreen()),
       if (mgr) (Icons.store_mall_directory_outlined, Loc.t('Shop Rent', 'دکان کا کرایہ'), Loc.t('Monthly rent', 'ماہانہ کرایہ'), p.orange, () => const ShopRentScreen()),
       if (mgr) (Icons.bolt_outlined, Loc.t('Utility Bills', 'بل'), Loc.t('Electricity, gas, internet', 'بجلی، گیس، انٹرنیٹ'), p.blue, () => const UtilityBillsScreen()),
+      if (mgr) (Icons.gavel_outlined, Loc.t('Agreement terms', 'اقرار نامہ کی شرائط'), Loc.t('Printed on plan PDF', 'پلان کی PDF پر چھپیں'), p.navy, () => const InstTermsScreen()),
       if (admin) (Icons.backup_outlined, Loc.t('Backup / Restore', 'بیک اپ'), Loc.t('Save your data', 'ڈیٹا محفوظ کریں'), p.teal, () => const BackupExportScreen()),
       if (admin) (Icons.manage_accounts_outlined, Loc.t('Users', 'یوزرز'), Loc.t('Staff login and roles', 'اسٹاف لاگ اِن'), p.navyLight, () => const UserManagementScreen()),
       if (admin) (Icons.restore_from_trash_outlined, Loc.t('Recycle Bin', 'ری سائیکل بن'), Loc.t('Deleted records', 'حذف شدہ ریکارڈ'), p.textMuted, () => const RecycleBinScreen()),

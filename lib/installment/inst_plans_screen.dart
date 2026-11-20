@@ -19,6 +19,7 @@ import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
 import 'inst_reports.dart' show profitShare;
 import 'inst_repository.dart';
+import 'inst_security_screens.dart';
 import 'inst_ui.dart';
 import 'kyc_photo_store.dart';
 
@@ -507,6 +508,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
     final qErr = _quoteError();
     if (qErr != null) return instToast(context, qErr);
     final q = _quote()!;
+    if (!await instRiskCheck(context, c.id, guarantorIds: [for (final id in _gSel) id])) return; // blacklist / saman wapas / zamin
+    if (!mounted) return;
 
     // Kaghzat / tasveerein ki kami: rokte nahi, poochte hain.
     final issues = <String>[];
@@ -1153,6 +1156,16 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
   }
 
   Future<void> _menu(String action, PlanView v) async {
+    if (action == 'exchange') {
+      final ok = await showDialog<bool>(context: context, builder: (_) => _ExchangeDialog(v: v));
+      if (ok == true) await _reload();
+      return;
+    }
+    if (action == 'reschedule') {
+      final ok = await showDialog<bool>(context: context, builder: (_) => _RescheduleDialog(v: v));
+      if (ok == true) await _reload();
+      return;
+    }
     if (action == 'repossess') {
       final note = TextEditingController();
       final ok = await showDialog<bool>(
@@ -1237,6 +1250,8 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
                 iconColor: Colors.white,
                 onSelected: (a) => _menu(a, v),
                 itemBuilder: (_) => [
+                  if (v.plan.isActive) PopupMenuItem(value: 'exchange', child: Text(Loc.t('Exchange item', 'سامان بدلیں'))),
+                  if (v.plan.isActive) PopupMenuItem(value: 'reschedule', child: Text(Loc.t('Change installments (reschedule)', 'قسطیں تبدیل کریں'))),
                   if (v.plan.isActive) PopupMenuItem(value: 'repossess', child: Text(Loc.t('Take item back', 'سامان واپس لیں'))),
                   if (Session.isAdmin) PopupMenuItem(value: 'delete', child: Text(Loc.t('Delete plan (mistake)', 'پلان حذف (غلطی)'))),
                 ],
@@ -1263,6 +1278,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
                         if (v.payments.isEmpty)
                           Text(Loc.t('No payment yet.', 'ابھی کوئی وصولی نہیں۔'), style: TextStyle(color: p.textMuted)),
                         for (final pay in v.payments) _payment(p, v, pay),
+                        PlanSecuritiesSection(key: ValueKey('sec-${v.plan.id}-${v.plan.status}'), planId: v.plan.id, planActive: v.plan.isActive),
                         if (v.plan.note.isNotEmpty) ...[
                           instSectionTitle(p, Loc.t('NOTE', 'نوٹ')),
                           Text(v.plan.note, style: TextStyle(color: p.textDark)),
@@ -1641,6 +1657,361 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(Loc.t('Cancel', 'منسوخ'))),
         FilledButton(onPressed: _ok, child: Text(Loc.t('Receive', 'وصول'))),
+      ],
+    );
+  }
+}
+
+
+/// Qisten badalna (Step 17): customer ki halat ke mutabiq baqi raqam nayi qiston mein. Preview ke saath.
+class _RescheduleDialog extends StatefulWidget {
+  final PlanView v;
+  const _RescheduleDialog({required this.v});
+  @override
+  State<_RescheduleDialog> createState() => _RescheduleDialogState();
+}
+
+class _RescheduleDialogState extends State<_RescheduleDialog> {
+  final _count = TextEditingController();
+  final _extra = TextEditingController();
+  final _note = TextEditingController();
+  late String _freq = widget.v.plan.frequency;
+  late int _first;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final st = widget.v.status;
+    final unpaid = st.lines.where((l) => l.remaining > 0.5).length;
+    _count.text = '${unpaid < 1 ? 1 : unpaid}';
+    final now = DateTime.now();
+    final nx = st.next?.dueDate ?? 0;
+    _first = nx > dayStart(now) ? nx : dayStart(addMonthsClamped(now, 1));
+  }
+
+  @override
+  void dispose() {
+    _count.dispose();
+    _extra.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  double get _paid =>
+      widget.v.payments.where((x) => x.kind == payInstallment || x.kind == payDiscount).fold<double>(0, (a, x) => a + x.amount);
+
+  (List<(int, double)>?, String?) _preview() {
+    try {
+      final lines = rescheduleLines(
+        schedule: widget.v.schedule,
+        paid: _paid,
+        count: int.tryParse(_count.text.trim()) ?? 0,
+        firstDue: _first,
+        frequency: _freq,
+        extra: double.tryParse(_extra.text.trim().isEmpty ? '0' : _extra.text.trim()) ?? -1,
+        roundTo: widget.v.plan.roundTo,
+      );
+      return (lines, null);
+    } catch (e) {
+      return (null, instErr(e));
+    }
+  }
+
+  Future<void> _pick() async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+        context: context,
+        initialDate: DateTime.fromMillisecondsSinceEpoch(_first),
+        firstDate: DateTime(now.year - 1),
+        lastDate: DateTime(now.year + 3));
+    if (d != null) setState(() => _first = dayStart(d));
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await InstPlanRepository.instance.reschedule(widget.v.plan.id,
+          count: int.tryParse(_count.text.trim()) ?? 0,
+          firstDue: _first,
+          frequency: _freq,
+          extra: double.tryParse(_extra.text.trim().isEmpty ? '0' : _extra.text.trim()) ?? -1,
+          note: _note.text);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        instToast(context, instErr(e));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (lines, err) = _preview();
+    final kept = lines == null ? 0 : lines.length - (int.tryParse(_count.text.trim()) ?? 0);
+    final newLines = lines == null ? const <(int, double)>[] : lines.sublist(kept < 0 ? 0 : kept);
+    return AlertDialog(
+      title: Text(Loc.t('Change installments', 'قسطیں تبدیل کریں')),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${Loc.t('Remaining', 'باقی')}: Rs ${widget.v.status.remaining.round()}  •  '
+                '${Loc.t('Paid', 'ادا')}: Rs ${_paid.round()}'),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _count,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(labelText: Loc.t('New installments', 'نئی قسطیں')),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _freq,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: Loc.t('Every', 'ہر')),
+                  items: [for (final f in planFrequencies) DropdownMenuItem(value: f, child: Text(freqLabel(f)))],
+                  onChanged: (f) => setState(() => _freq = f ?? _freq),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: const Icon(Icons.event),
+              title: Text('${Loc.t('First new installment', 'پہلی نئی قسط')}: ${_d(_first)}'),
+              onTap: _pick,
+            ),
+            TextField(
+              controller: _extra,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                  labelText: Loc.t('Extra charge (optional)', 'اضافی چارج (اختیاری)'),
+                  helperText: Loc.t('Added to remaining and counted as profit', 'باقی میں جمع، منافع شمار ہو گا')),
+              onChanged: (_) => setState(() {}),
+            ),
+            TextField(controller: _note, decoration: InputDecoration(labelText: Loc.t('Reason', 'وجہ'))),
+            const SizedBox(height: 12),
+            if (err != null)
+              Text(err, style: const TextStyle(color: Colors.red))
+            else ...[
+              Text(Loc.t('New schedule', 'نیا شیڈول'), style: const TextStyle(fontWeight: FontWeight.bold)),
+              for (var i = 0; i < newLines.length; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(children: [
+                    Expanded(child: Text('${i + 1}.  ${_d(newLines[i].$1)}')),
+                    Text('Rs ${newLines[i].$2.round()}'),
+                  ]),
+                ),
+            ],
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _saving ? null : () => Navigator.pop(context, false), child: Text(Loc.t('Cancel', 'منسوخ'))),
+        TextButton(
+            onPressed: _saving || err != null ? null : _save,
+            child: Text(_saving ? '...' : Loc.t('Save', 'محفوظ کریں'))),
+      ],
+    );
+  }
+}
+
+
+/// Saman badalna (Step 24): naya piece (stock se), qeemat ka farq, nayi qisten. Preview ke saath.
+class _ExchangeDialog extends StatefulWidget {
+  final PlanView v;
+  const _ExchangeDialog({required this.v});
+  @override
+  State<_ExchangeDialog> createState() => _ExchangeDialogState();
+}
+
+class _ExchangeDialogState extends State<_ExchangeDialog> {
+  List<InstItem> _stock = const [];
+  InstItem? _item;
+  final _q = TextEditingController();
+  final _diff = TextEditingController();
+  final _count = TextEditingController();
+  final _note = TextEditingController();
+  late int _first;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final st = widget.v.status;
+    final unpaid = st.lines.where((l) => l.remaining > 0.5).length;
+    _count.text = '${unpaid < 1 ? 1 : unpaid}';
+    final now = DateTime.now();
+    final nx = st.next?.dueDate ?? 0;
+    _first = nx > dayStart(now) ? nx : dayStart(addMonthsClamped(now, 1));
+    InstRepository.instance.items(status: itemInStock).then((l) {
+      if (mounted) setState(() => _stock = l);
+    });
+  }
+
+  @override
+  void dispose() {
+    _q.dispose();
+    _diff.dispose();
+    _count.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  double get _paid =>
+      widget.v.payments.where((x) => x.kind == payInstallment || x.kind == payDiscount).fold<double>(0, (a, x) => a + x.amount);
+
+  double get _diffValue {
+    final t = _diff.text.trim().replaceAll(',', '');
+    return double.tryParse(t.isEmpty ? '0' : t) ?? double.nan;
+  }
+
+  void _pick(InstItem it) {
+    final oldPrice = (widget.v.item?.cashPrice ?? 0) > 0 ? widget.v.item!.cashPrice : widget.v.plan.cashPrice;
+    setState(() {
+      _item = it;
+      _diff.text = instPlain(it.cashPrice - oldPrice);
+    });
+  }
+
+  (List<(int, double)>?, String?) _preview() {
+    if (_item == null) return (null, Loc.t('Choose the new item.', 'نیا سامان چنیں۔'));
+    try {
+      return (
+        rescheduleLines(
+          schedule: widget.v.schedule,
+          paid: _paid,
+          count: int.tryParse(_count.text.trim()) ?? 0,
+          firstDue: _first,
+          frequency: widget.v.plan.frequency,
+          extra: _diffValue,
+          roundTo: widget.v.plan.roundTo,
+        ),
+        null
+      );
+    } catch (e) {
+      return (null, instErr(e));
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+        context: context,
+        initialDate: DateTime.fromMillisecondsSinceEpoch(_first),
+        firstDate: DateTime(now.year - 1),
+        lastDate: DateTime(now.year + 3));
+    if (d != null) setState(() => _first = dayStart(d));
+  }
+
+  Future<void> _save() async {
+    final it = _item;
+    if (_saving || it == null) return;
+    setState(() => _saving = true);
+    try {
+      await InstPlanRepository.instance.exchange(widget.v.plan.id,
+          newItemId: it.id!,
+          priceDiff: _diffValue,
+          count: int.tryParse(_count.text.trim()) ?? 0,
+          firstDue: _first,
+          note: _note.text);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        instToast(context, instErr(e));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (lines, err) = _preview();
+    final n = int.tryParse(_count.text.trim()) ?? 0;
+    final fresh = lines == null || n <= 0 || n > lines.length ? const <(int, double)>[] : lines.sublist(lines.length - n);
+    final q = _q.text.trim();
+    final matches = q.isEmpty ? _stock.take(6).toList() : _stock.where((i) => i.matches(q)).take(8).toList();
+    return AlertDialog(
+      title: Text(Loc.t('Exchange item', 'سامان بدلیں')),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${Loc.t('Old', 'پرانا')}: ${widget.v.itemTitle}  •  ${Loc.t('Remaining', 'باقی')} ${instRs(widget.v.status.remaining)}'),
+            const SizedBox(height: 8),
+            if (_item == null) ...[
+              TextField(
+                controller: _q,
+                decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search), labelText: Loc.t('New item: model / IMEI', 'نیا سامان: ماڈل / IMEI')),
+                onChanged: (_) => setState(() {}),
+              ),
+              for (final it in matches)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(it.title.isEmpty ? it.model : it.title),
+                  subtitle: Text([it.primaryId, if (it.cashPrice > 0) instRs(it.cashPrice)].where((x) => x.isNotEmpty).join('  •  ')),
+                  onTap: () => _pick(it),
+                ),
+              if (_stock.isEmpty) Text(Loc.t('No item in stock.', 'اسٹاک میں کوئی سامان نہیں۔')),
+            ] else ...[
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.swap_horiz),
+                title: Text('${Loc.t('New', 'نیا')}: ${_item!.title.isEmpty ? _item!.model : _item!.title}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(_item!.primaryId),
+                trailing: TextButton(onPressed: () => setState(() => _item = null), child: Text(Loc.t('Change', 'بدلیں'))),
+              ),
+              TextField(
+                controller: _diff,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                decoration: InputDecoration(
+                    labelText: Loc.t('Price difference (+ costlier / - cheaper)', 'قیمت کا فرق (+ مہنگا / - سستا)')),
+                onChanged: (_) => setState(() {}),
+              ),
+              TextField(
+                controller: _count,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(labelText: Loc.t('Installments for the rest', 'باقی کی قسطیں')),
+                onChanged: (_) => setState(() {}),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.event),
+                title: Text('${Loc.t('First new installment', 'پہلی نئی قسط')}: ${_d(_first)}'),
+                onTap: _pickDate,
+              ),
+              TextField(controller: _note, decoration: InputDecoration(labelText: Loc.t('Reason', 'وجہ'))),
+              const SizedBox(height: 10),
+              if (err != null)
+                Text(err, style: const TextStyle(color: Colors.red))
+              else ...[
+                Text(Loc.t('New schedule', 'نیا شیڈول'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                for (var i = 0; i < fresh.length; i++)
+                  Row(children: [Expanded(child: Text('${i + 1}.  ${_d(fresh[i].$1)}')), Text('Rs ${fresh[i].$2.round()}')]),
+              ],
+            ],
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _saving ? null : () => Navigator.pop(context, false), child: Text(Loc.t('Cancel', 'منسوخ'))),
+        TextButton(onPressed: _saving || err != null ? null : _save, child: Text(Loc.t('Exchange', 'بدلیں'))),
       ],
     );
   }

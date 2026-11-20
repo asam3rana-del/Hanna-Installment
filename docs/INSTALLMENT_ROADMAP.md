@@ -175,5 +175,52 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
   Munafa: −discount × (khareed / qist qeemat) (yani asal = (qist − discount) − khareed). Reports mein "Rayat di"
 - Plan screen par discount ki line (🏷), raseed / PDF mein "Discount"; hata bhi sakte hain (Admin / Manager)
 
+## Step 17 — done (DB change nahi): qisten badalna (reschedule)
+- Plan menu (Admin / Manager) -> "Qisten tabdeel": ada hissa wahi (aadhi ada qist tootti hai), baqi + izafi charge
+  (ikhtiyari, munafa mein) nayi ginti / waqfe / pehli tareekh se. Dialog mein naya schedule preview. Plan note mein record.
+- Plan ki count / frequency / firstDueDate / installmentTotal / totalPrice / profit update; schedule sync ke saath jata hai.
+
+## Step 18 — done (DB v45): customer blacklist
+- `customer_profiles.blockedReason / blockedAt`. Customer detail (Admin / Manager) -> block icon: wajah likho; laal banner,
+  list mein "Blacklist" badge. Sync hota hai. Profile edit karne se block nahi hat'ta.
+- Naya qist plan: blacklist ya pehle saman wapas liya gaya ho to warning; blacklist customer ka plan sirf Admin / Manager.
+
+## Step 19 — done (DB / naya package nahi): scanner se sale
+- Dashboard: "Scan se Sale" tile + upar scanner icon. Camera se IMEI / serial / engine no. ki tasveer -> ML Kit text
+  (phone par hi, pehle se app mein) -> stock ka piece -> "Naqd sale" ya "Qist par". Bika hua piece: tafseel.
+- PC / mobile: USB / Bluetooth barcode scanner (keyboard jaisa) ya haath se number likh kar Enter.
+- Live barcode (Step 19b): `mobile_scanner` (Android CameraX + ML Kit, iOS). Dabbe ke kai barcode mein se jo stock se
+  mile wahi; baqi par "stock mein nahi" likh kar scan jari. Torch button. Windows par button chhupa (scanner gun chalti hai).
+- import-zip.yml: pubspec.yaml badle to pubspec.lock khud `flutter pub get` se bana kar commit.
+
+## Step 20 — done: iqrar nama ki sharait + privacy site
+- Shop tools -> "Iqrar nama ki sharait" (Admin / Manager): dukaan ki sharait (har line ek shart, Urdu / English namuna).
+  Plan ki PDF mein dastakhat se pehle "Sharait / Iqrar nama" + "humne sharait parh kar qubool kin". Har device par alag.
+- Privacy policy site: `web_installment/` (index + privacy, camera scanning ki line samet). Deploy: Actions ->
+  Deploy Firebase -> what = privacy (service account ko "Firebase Hosting Admin" role) -> https://<project>.web.app/privacy.html
+
+## Step 21 — done (DB v46): security cheque / kaghzat
+- `inst_securities` (plan ke doc mein `securities` list ke saath sync, alag collection / rules nahi). Plan detail ->
+  "Zamanat": cheque (number, bank, raqam) / stamp paper / doosra kaghaz; tap -> wapas diya / hatao. Plan band aur kaghaz
+  paas ho to peeli patti. Dashboard "Cheque aur kaghzat": sab paas pare, band plan wale upar. Plan PDF mein bhi.
+
+## Step 22 — done: sab ko ek saath yaad-dahani
+- Dashboard "Yaad dahani bhejein": aaj + late / kal tak / 3 din. "Agla bhejein" har dafa agle customer ki WhatsApp chat
+  (message tayyar). Aaj kis ko bhej diya, isi device par yaad (har din naya).
+
+## Step 23 — done: zamin ki jaanch
+- Naya plan save par: zamin ka CNIC kisi blacklist customer / saman-wapas customer ka ho, ya woh pehle kisi saman-wapas
+  plan ka zamin raha ho => warning (customer ki warning ke saath).
+
+## Step 24 — done: saman badalna (exchange)
+- Plan menu -> "Saman badlein": stock se naya piece (search), qeemat ka farq (+/-), baqi ki qisten, preview. Ada raqam
+  wahi; purana piece `returned` (check kar ke dobara stock), naya `sold`; khareed qeemat / munafa / plan note update.
+
+## Step 25 — done: Excel export
+- Har report ka PDF button ab poochta hai: PDF ya Excel (CSV, UTF-8 BOM, raqam number ki shakal mein, formula se hifazat).
+
+## Step 26 — done: dashboard chart (Admin / Manager)
+- Pichhle 6 mahine: sale (plan + naqd), wasooli, munafa — bar chart, mahine par tap = us ki raqam.
+
 ## Abhi baqi
 - Feature graphic (Play Store)

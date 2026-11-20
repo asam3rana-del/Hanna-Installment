@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 44;
+  static const _dbVersion = 46;
 
   Database? _db;
 
@@ -355,7 +355,7 @@ class AppDatabase {
       )
     ''');
 
-    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql, ...installmentPurchaseTablesSql, ...installmentCashSaleTablesSql, ...installmentPurchaseReturnTablesSql]) {
+    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql, ...installmentPurchaseTablesSql, ...installmentCashSaleTablesSql, ...installmentPurchaseReturnTablesSql, ...installmentSecurityTablesSql]) {
       batch.execute(sql);
     }
     final seedAt = DateTime.now().millisecondsSinceEpoch;
@@ -642,6 +642,17 @@ class AppDatabase {
       await _addColumnIfMissing(db, 'inst_cash_sales', 'refund', 'REAL');
       await _addColumnIfMissing(db, 'inst_cash_sales', 'returnNote', 'TEXT');
       await _addColumnIfMissing(db, 'inst_cash_sales', 'refundCashTxId', 'INTEGER');
+    }
+    if (oldVersion < 45) {
+      // v45: customer blacklist (qist na dene wala / dhoka) — wajah aur tareekh; naye plan par warning.
+      await _addColumnIfMissing(db, 'customer_profiles', 'blockedReason', "TEXT NOT NULL DEFAULT ''");
+      await _addColumnIfMissing(db, 'customer_profiles', 'blockedAt', 'INTEGER NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 46) {
+      // v46: plan ke saath liye gaye security cheque / stamp paper (plan ke doc mein sync).
+      for (final sql in installmentSecurityTablesSql) {
+        await db.execute(sql);
+      }
     }
     // products.searchTag was added to _onCreate WITHOUT a migration step, so a database created by the
     // earliest builds (schema v1) never got the column. Found by the real-file migration test
@@ -968,7 +979,9 @@ class AppDatabase {
         note TEXT NOT NULL DEFAULT '',
         createdAt INTEGER NOT NULL DEFAULT 0,
         updatedAt INTEGER NOT NULL DEFAULT 0,
-        serverId TEXT
+        serverId TEXT,
+        blockedReason TEXT NOT NULL DEFAULT '',
+        blockedAt INTEGER NOT NULL DEFAULT 0
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_customer_profiles_cnic ON customer_profiles (cnic)',
@@ -1205,6 +1218,25 @@ class AppDatabase {
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_purchase_returns_supplier ON inst_purchase_returns (supplierId, returnedAt)',
+  ];
+
+  /// v46: plan ki zamanat — security cheque / stamp paper / doosre kaghzat. `returnedAt` > 0 = customer ko wapas.
+  /// Alag cloud collection nahi: plan ke sync doc mein `securities` list (schedule ki tarah).
+  static const installmentSecurityTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS inst_securities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        planId INTEGER NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'cheque',
+        number TEXT NOT NULL DEFAULT '',
+        bank TEXT NOT NULL DEFAULT '',
+        amount REAL NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        returnedAt INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL DEFAULT 0
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_securities_plan ON inst_securities (planId)',
   ];
 
   static List<Map<String, Object?>> _defaultInstCategoryRows(int now) => [

@@ -86,6 +86,54 @@ class PlanQuote {
   List<double> get amounts => [for (var i = 0; i < count; i++) i == count - 1 ? last : each];
 }
 
+/// Plan ki qisten dobara banana (Step 17, PURE — test/installment_plan_test.dart).
+/// [schedule] = purani (tareekh, raqam), [paid] = ab tak ada qist (discount samet, advance nahi). [extra] minus bhi ho sakta
+/// hai (exchange mein sasta piece) magar baqi 0 se zyada rehna chahiye.
+/// Ada hissa wahi rehta hai (aadhi ada qist tootti hai: ada hissa purani tareekh par), baqi + [extra] (izafi charge)
+/// [count] nayi qiston mein [firstDue] se [frequency] par, [roundTo] tak upar gol, farq aakhri qist mein.
+List<(int, double)> rescheduleLines({
+  required List<(int, double)> schedule,
+  required double paid,
+  required int count,
+  required int firstDue,
+  required String frequency,
+  double extra = 0,
+  int roundTo = 1,
+}) {
+  if (count < 1 || count > 60) throw ArgumentError('Qisten 1 se 60 tak.');
+  if (!extra.isFinite) throw ArgumentError('Izafi raqam theek nahi.'); // minus = kam (saman badalne par sasta piece)
+  if (firstDue <= 0) throw ArgumentError('Pehli qist ki tareekh chunein.');
+  if (!planFrequencies.contains(frequency)) throw ArgumentError('Qist ka waqfa chunein.');
+  final kept = <(int, double)>[];
+  var left = paid < 0 ? 0.0 : paid;
+  var total = 0.0;
+  for (final (due, amt) in schedule) {
+    total += amt;
+    if (left <= 0.005) continue;
+    final take = math.min(left, amt);
+    kept.add((due, _r2(take)));
+    left = _r2(left - take);
+  }
+  final remaining = _r2(total - (paid < 0 ? 0 : math.min(paid, total)) + extra);
+  if (remaining <= 0.5) throw ArgumentError('Is plan ka koi baqi nahi — qisten badalne ki zaroorat nahi.');
+  final step = roundTo < 1 ? 1 : roundTo;
+  var each = ((remaining / count) / step).ceil() * step.toDouble();
+  var last = _r2(remaining - each * (count - 1));
+  if (count > 1 && last <= 0) {
+    each = ((remaining / count) / step).floor() * step.toDouble();
+    if (each <= 0) each = (remaining / count).floorToDouble();
+    last = _r2(remaining - each * (count - 1));
+  }
+  if (count == 1) {
+    each = remaining;
+    last = remaining;
+  }
+  return [
+    ...kept,
+    for (var i = 0; i < count; i++) (dueDateOf(firstDue, frequency, i), i == count - 1 ? last : _r2(each)),
+  ];
+}
+
 /// Qist ki raqam. Galat input => [ArgumentError] (message screen par dikhta hai).
 PlanQuote quotePlan({
   required double cashPrice,

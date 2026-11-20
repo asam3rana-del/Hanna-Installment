@@ -12,3 +12,4 @@ analyzer:
     - utils/**
     - theme/**
     - backup/**
+    - build/**

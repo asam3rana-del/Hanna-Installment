@@ -51,13 +51,14 @@ InputDecoration instDeco(AppPalette p, String label, {String? hint, Widget? suff
     );
 
 Widget instHeader(BuildContext context, AppPalette p, String title, String subtitle,
-    {List<Widget> actions = const [], bool back = true}) {
+    {List<Widget> actions = const [], bool back = true, Widget? leading}) {
   return Container(
     color: p.navy,
-    padding: EdgeInsets.fromLTRB(back ? 8 : 18, MediaQuery.of(context).padding.top + 10, 8, 14),
+    padding: EdgeInsets.fromLTRB(back || leading != null ? 8 : 18, MediaQuery.of(context).padding.top + 10, 8, 14),
     child: Row(children: [
       if (back)
         IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).maybePop()),
+      if (leading != null) leading,
       Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title,

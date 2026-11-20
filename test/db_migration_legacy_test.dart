@@ -41,6 +41,8 @@ void main() {
 
   // version -> what that migration step added (removed when rewinding to a version below it)
   final steps = <_Step>[
+    _Step(46, tables: ['inst_securities']),
+    _Step(45, columns: {'customer_profiles': ['blockedReason', 'blockedAt']}),
     _Step(44, columns: {'inst_cash_sales': ['returnedAt', 'refund', 'returnNote', 'refundCashTxId']}),
     _Step(43, tables: ['inst_purchase_returns'], columns: {'inst_cash_sales': ['customerId']}),
     _Step(42, tables: ['inst_cash_sales']),

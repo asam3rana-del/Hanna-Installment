@@ -133,4 +133,39 @@ void main() {
     expect(parseIdList('[3, 5]'), [3, 5]);
     expect(parseIdList('bad'), isEmpty);
   });
+
+  group('rescheduleLines (Step 17)', () {
+    final d0 = DateTime(2026, 1, 10).millisecondsSinceEpoch;
+    final sched = [for (var i = 0; i < 6; i++) (dueDateOf(d0, freqMonthly, i), 1000.0)];
+    final f = DateTime(2026, 6, 1).millisecondsSinceEpoch;
+
+    test('keeps paid lines, splits partial, spreads rest + extra', () {
+      final l = rescheduleLines(schedule: sched, paid: 2500, count: 4, firstDue: f, frequency: freqMonthly, extra: 500, roundTo: 10);
+      expect(l.take(3).map((x) => x.$2).toList(), [1000, 1000, 500]);
+      expect(l[2].$1, sched[2].$1);
+      final fresh = l.skip(3).toList();
+      expect(fresh.length, 4);
+      expect(fresh.first.$1, f);
+      expect(fresh.map((x) => x.$2).toList(), [1000, 1000, 1000, 1000]); // 3500 + 500
+      expect(l.fold<double>(0, (a, x) => a + x.$2), 6500);
+    });
+
+    test('rounding leftover goes to last; weekly dates', () {
+      final l = rescheduleLines(schedule: sched, paid: 0, count: 7, firstDue: f, frequency: freqWeekly, roundTo: 10);
+      expect(l.length, 7);
+      expect(l.first.$2, 860); // 6000/7 = 857.1 -> 860
+      expect(l.last.$2, 6000 - 860 * 6);
+      expect(l[1].$1 - l[0].$1, const Duration(days: 7).inMilliseconds);
+    });
+
+    test('errors', () {
+      expect(() => rescheduleLines(schedule: sched, paid: 6000, count: 2, firstDue: f, frequency: freqMonthly), throwsArgumentError);
+      expect(() => rescheduleLines(schedule: sched, paid: 0, count: 0, firstDue: f, frequency: freqMonthly), throwsArgumentError);
+      expect(() => rescheduleLines(schedule: sched, paid: 5000, count: 2, firstDue: f, frequency: freqMonthly, extra: -1000),
+          throwsArgumentError); // baqi 0
+      // Exchange: sasta piece => baqi kam.
+      final l = rescheduleLines(schedule: sched, paid: 2000, count: 2, firstDue: f, frequency: freqMonthly, extra: -1000);
+      expect(l.skip(2).map((x) => x.$2).toList(), [1500, 1500]);
+    });
+  });
 }

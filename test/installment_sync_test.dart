@@ -23,7 +23,7 @@ Future<Database> _device() async {
   await db.execute('''CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, entityType TEXT NOT NULL,
     entityId TEXT NOT NULL, operation TEXT NOT NULL, payloadJson TEXT NOT NULL, createdAt INTEGER NOT NULL,
     syncedAt INTEGER, retryCount INTEGER NOT NULL DEFAULT 0, lastError TEXT)''');
-  for (final sql in [...AppDatabase.installmentTablesSql, ...AppDatabase.installmentPlanTablesSql, ...AppDatabase.installmentPriceTablesSql, ...AppDatabase.installmentPurchaseTablesSql, ...AppDatabase.installmentCashSaleTablesSql, ...AppDatabase.installmentPurchaseReturnTablesSql]) {
+  for (final sql in [...AppDatabase.installmentTablesSql, ...AppDatabase.installmentPlanTablesSql, ...AppDatabase.installmentPriceTablesSql, ...AppDatabase.installmentPurchaseTablesSql, ...AppDatabase.installmentCashSaleTablesSql, ...AppDatabase.installmentPurchaseReturnTablesSql, ...AppDatabase.installmentSecurityTablesSql]) {
     await db.execute(sql);
   }
   return db;
@@ -76,7 +76,7 @@ void main() {
 
   Future<void> seedA() async {
     await a.insert('customers', {'name': 'Ali', 'serverId': 'customer:AAAA-1'});
-    await a.insert('customer_profiles', {'customerId': 1, 'fatherName': 'Aslam', 'cnic': '35202-1234567-1', 'createdAt': 1});
+    await a.insert('customer_profiles', {'customerId': 1, 'fatherName': 'Aslam', 'cnic': '35202-1234567-1', 'createdAt': 1, 'blockedReason': 'Qist band', 'blockedAt': 5});
     await a.insert('inst_guarantors', {'customerId': 1, 'name': 'Usman', 'phone': '03001234567', 'createdAt': 1});
     await a.insert('inst_categories', {'name': 'Mobile', 'idFields': '["IMEI 1","IMEI 2"]'});
     await a.insert('inst_items', {'categoryId': 1, 'brand': 'Samsung', 'model': 'A15', 'idValues': '{"IMEI 1":"356789012345678"}', 'cashPrice': 50000, 'status': 'sold'});
@@ -86,6 +86,7 @@ void main() {
     });
     await a.insert('inst_schedule', {'planId': 1, 'seq': 1, 'dueDate': 100, 'amount': 26000});
     await a.insert('inst_schedule', {'planId': 1, 'seq': 2, 'dueDate': 200, 'amount': 26000});
+    await a.insert('inst_securities', {'planId': 1, 'kind': 'cheque', 'number': '00012345', 'bank': 'HBL', 'amount': 52000, 'createdAt': 2});
     await a.insert('cash_transactions', {'type': 'IN', 'method': 'cash', 'amount': 10000, 'reference': 'inst-pay:1-1', 'createdAt': 3});
     await a.insert('inst_payments', {'planId': 1, 'kind': 'advance', 'amount': 10000, 'cashTxId': 1, 'paidAt': 3, 'createdAt': 3});
     await SyncQueueHelper.enqueueCashTransaction(a, 1);
@@ -113,6 +114,12 @@ void main() {
     final prof = (await b.query('customer_profiles')).single;
     expect(prof['customerId'], 2);
     expect(prof['cnic'], '35202-1234567-1');
+    expect(prof['blockedReason'], 'Qist band'); // blacklist bhi sync (Step 18)
+    expect(prof['blockedAt'], 5);
+    final sec = (await b.query('inst_securities')).single; // Step 21: plan ke doc ke saath
+    expect(sec['number'], '00012345');
+    expect(sec['bank'], 'HBL');
+    expect(sec['amount'], 52000);
     final g = (await b.query('inst_guarantors')).single;
     expect(g['customerId'], 2);
     final item = (await b.query('inst_items')).single;

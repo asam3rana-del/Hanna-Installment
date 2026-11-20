@@ -21,11 +21,18 @@ import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
 import 'inst_purchase_screens.dart';
 import 'inst_report_screens.dart';
+import 'inst_scan.dart';
+import 'inst_bulk_remind.dart';
+import 'inst_security_screens.dart';
+import 'inst_trend_chart.dart';
 import 'inst_update.dart';
 import 'inst_repository.dart';
 import 'inst_shop_tools_screen.dart';
 import '../license/license_screen.dart';
 import '../services/bill_reminder_service.dart';
+import '../services/staff_auth.dart';
+import '../sync/branch_config_store.dart';
+import '../sync/settings_sync.dart';
 import 'inst_ui.dart';
 
 /// Hanna Installment ka home (login ke baad pehli screen).
@@ -43,12 +50,44 @@ class InstallmentHomeScreen extends StatefulWidget {
 class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
   InstHomeStats _stats = const InstHomeStats();
   InstCollectionStats _col = const InstCollectionStats();
+  bool _syncing = false;
+
+  /// Dashboard ka Sync button: abhi cloud se lena / dena (Settings > Sync Now jaisa).
+  Future<void> _syncNow() async {
+    if (_syncing) return;
+    if (!await SettingsSync.cloudConfigured() || !BranchConfigStore.isConfigured()) {
+      if (mounted) {
+        instToast(context, Loc.t('Cloud sync is not set up. Settings > Cloud Sync.', 'کلاؤڈ سنک سیٹ نہیں۔ سیٹنگز > کلاؤڈ سنک۔'));
+      }
+      return;
+    }
+    if (!await SettingsSync.isOnline()) {
+      if (mounted) instToast(context, Loc.t('No internet connection', 'انٹرنیٹ کنکشن نہیں'));
+      return;
+    }
+    setState(() => _syncing = true);
+    String? msg;
+    try {
+      msg = await SettingsSync.syncNow();
+    } catch (e) {
+      msg = Loc.t('Sync failed', 'سنک ناکام');
+    }
+    if (!mounted) return;
+    setState(() => _syncing = false);
+    instToast(context, msg ?? Loc.t('No internet connection', 'انٹرنیٹ کنکشن نہیں'));
+    await _load();
+  }
 
   @override
   void initState() {
     super.initState();
     InstRepository.instance.changes.addListener(_load);
     _load();
+    // "Secure Cloud Login (staff)" Settings se hata diya (staff server set nahi). Pehle ON kiya ho to OFF — warna
+    // sync anonymous par wapas nahi jata aur ruk jata hai.
+    StaffAuth.isEnabled().then((on) {
+      if (on) StaffAuth.setEnabled(false);
+    });
     // Android 13+: roz ki qist notification ke liye ijazat (pehli baar poochta hai).
     BillReminderService.requestPermission();
     // Pichhli dafa app band (crash) hui ho to log dikhao / developer ko bhejo (purane POS dashboard se).
@@ -216,8 +255,14 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
           () => _push(const InstPlansScreen())),
       _Tile(Icons.point_of_sale, Loc.t('Cash Sale', 'نقد سیل'), Loc.t('Sell without installments', 'بغیر قسط بیچیں'), p.tealDark,
           () => _push(const InstCashSalesScreen())),
+      _Tile(Icons.qr_code_scanner, Loc.t('Scan & Sell', 'اسکین سے سیل'), Loc.t('Scan IMEI -> cash / qist', 'IMEI اسکین -> نقد / قسط'), p.purple,
+          () => _push(const InstScanSaleScreen())),
       _Tile(Icons.format_list_numbered, Loc.t('Collection List', 'وصولی لسٹ'), Loc.t('Who to collect from', 'کس سے کتنا لینا ہے'), p.blue,
           () => _push(const InstCollectionListScreen())),
+      _Tile(Icons.send_to_mobile_outlined, Loc.t('Send Reminders', 'یاد دہانی بھیجیں'), Loc.t('WhatsApp to all due', 'سب کو واٹس ایپ'), p.teal,
+          () => _push(const InstBulkRemindScreen())),
+      _Tile(Icons.payments_outlined, Loc.t('Cheques & Docs', 'چیک اور کاغذات'), Loc.t('Security held by shop', 'دکان کے پاس ضمانت'), p.navyLight,
+          () => _push(const InstHeldSecuritiesScreen())),
       _Tile(Icons.report_gmailerrorred_outlined, Loc.t('Defaulters', 'ڈیفالٹرز'), Loc.t('Late + guarantor phones', 'لیٹ + ضامن کے فون'), p.red,
           () => _push(const InstDefaultersScreen())),
       if (Session.isAdminOrManager)
@@ -234,9 +279,6 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
           () => _push(const InstCategoriesScreen())),
       _Tile(Icons.storefront_outlined, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, backup', 'کیش، خرچے، اسٹاف، بیک اپ'), p.orange,
           () => _push(const InstShopToolsScreen())),
-      if (Session.isAdminOrManager)
-        _Tile(Icons.settings_outlined, Loc.t('Settings', 'سیٹنگز'), Loc.t('Sync, backup, users', 'سنک، بیک اپ، یوزرز'), p.navyLight,
-            () => _push(const SettingsScreen())),
     ];
     return Scaffold(
       backgroundColor: p.bg,
@@ -247,7 +289,27 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
           AppInfo.appName,
           '${Loc.t('Hello', 'السلام علیکم')}, ${Session.displayName.isNotEmpty ? Session.displayName : (Session.username ?? '')}',
           back: false,
+          // Settings ka button upar bayen (Admin / Manager) — grid ka tile hata diya.
+          leading: Session.isAdminOrManager
+              ? IconButton(
+                  tooltip: Loc.t('Settings', 'سیٹنگز'),
+                  icon: const Icon(Icons.settings_outlined, color: Colors.white),
+                  onPressed: () => _push(const SettingsScreen()),
+                )
+              : null,
           actions: [
+            IconButton(
+              tooltip: Loc.t('Scan & Sell', 'اسکین سے سیل'),
+              icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+              onPressed: () => _push(const InstScanSaleScreen()),
+            ),
+            IconButton(
+              tooltip: Loc.t('Sync now', 'ابھی سنک کریں'),
+              onPressed: _syncing ? null : _syncNow,
+              icon: _syncing
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                  : const Icon(Icons.sync, color: Colors.white),
+            ),
             IconButton(
               tooltip: Loc.t('Log out', 'لاگ آؤٹ'),
               icon: const Icon(Icons.logout, color: Colors.white),
@@ -323,6 +385,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
                 childAspectRatio: 1.15,
                 children: [for (final t in tiles) _tile(p, t)],
               ),
+              if (Session.isAdminOrManager) const InstTrendChart(),
             ]),
           ),
         ),

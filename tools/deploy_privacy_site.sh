@@ -17,12 +17,12 @@ cat > public/index.html <<'AHPOS_EOF'
 <style>body{margin:0;font:16px/1.6 system-ui,sans-serif;color:#16233a;background:#f6f8fb}main{max-width:640px;margin:0 auto;padding:40px 20px}a{color:#1f5fbf}</style>
 </head><body><main>
 <h1>Hanna Installment</h1>
-<p>Installment (qist) sales and bookkeeping app by <b>Asam Hameed</b> (Hanna Solutions), Bhikhi, District Sheikhupura, Pakistan.</p>
+<p>Installment (qist) sales and bookkeeping app by <b>Asam Hameed</b> (Hanna Solutions), Ibtisaam Traders, Bhikhi, District Sheikhupura, Pakistan.</p>
 <ul>
 <li><a href="privacy.html">Privacy Policy / پرائیویسی پالیسی</a></li>
 <li><a href="privacy.html#english">Delete my data</a> — see section 5</li>
 </ul>
-<p>Support: <a href="mailto:asam9rana@gmail.com">asam9rana@gmail.com</a> · WhatsApp <a href="https://wa.me/923006296815">0300-6296815</a></p>
+<p>Support: <a href="mailto:hannasolutions1@gmail.com">hannasolutions1@gmail.com</a> · WhatsApp <a href="https://wa.me/923006296815">0300-6296815</a></p>
 </main></body></html>
 AHPOS_EOF
 cat > public/privacy.html <<'AHPOS_EOF'
@@ -52,7 +52,7 @@ cat > public/privacy.html <<'AHPOS_EOF'
 <body>
 <main>
 <h1>Hanna Installment — Privacy Policy</h1>
-<div class="meta">Developer: <b>Asam Hameed</b> (Hanna Solutions), Bhikhi, District Sheikhupura, Pakistan · Last updated: 13 November 2026</div>
+<div class="meta">Developer: <b>Asam Hameed</b> (Hanna Solutions), Ibtisaam Traders, Bhikhi, District Sheikhupura, Pakistan · Last updated: 13 November 2026</div>
 <div class="lang"><a href="#english">English</a><a href="#urdu">اردو</a></div>
 
 <section id="english">
@@ -91,6 +91,8 @@ the owner adds. This policy explains what information the app handles, where it 
 <ul>
   <li><b>Camera / photos:</b> to take customer and guarantor photos and CNIC pictures for installment records (kept on the device,
       and in the shop's own cloud branch only if Cloud Sync is on).</li>
+  <li><b>Camera (scanning):</b> to read IMEI / serial barcodes and printed numbers of stock items. This happens on the
+      device only; the camera picture is not saved or uploaded.</li>
   <li><b>Contacts:</b> only when you choose to pick a phone number from your contacts; only the chosen name and number are saved.</li>
   <li><b>Bluetooth, USB, local network (and on older Android, location for Bluetooth scanning):</b> only to find and use a receipt printer. Location is not stored or sent.</li>
   <li><b>Notifications:</b> daily installment due / late reminders.</li>
@@ -107,7 +109,7 @@ message goes through the app the shop chooses. We may disclose information if re
 <ul>
   <li>Data stays until the shop deletes it. Records can be deleted inside the app (deleted items go to the Recycle Bin first).</li>
   <li>Uninstalling the app removes the on-device copy. Cloud copies remain until deleted.</li>
-  <li><b>To delete a shop's cloud data or a staff account</b>, email <a href="mailto:asam9rana@gmail.com">asam9rana@gmail.com</a>
+  <li><b>To delete a shop's cloud data or a staff account</b>, email <a href="mailto:hannasolutions1@gmail.com">hannasolutions1@gmail.com</a>
       or WhatsApp <a href="https://wa.me/923006296815">0300-6296815</a> from the shop owner's number with the shop / branch name.
       We will delete it within 30 days and confirm.</li>
 </ul>
@@ -123,8 +125,8 @@ so please keep your phone locked and your passwords and backup password private.
 <p>If this policy changes, the new version will be posted on this page with a new date.</p>
 
 <h2>9. Contact</h2>
-<div class="box">Asam Hameed — Hanna Solutions · Bhikhi, District Sheikhupura, Punjab, Pakistan<br>
-Email: <a href="mailto:asam9rana@gmail.com">asam9rana@gmail.com</a> · Phone / WhatsApp: <a href="tel:+923006296815">0300-6296815</a></div>
+<div class="box">Asam Hameed — Hanna Solutions · Ibtisaam Traders, Bhikhi, District Sheikhupura, Punjab, Pakistan<br>
+Email: <a href="mailto:hannasolutions1@gmail.com">hannasolutions1@gmail.com</a> · Phone / WhatsApp: <a href="tel:+923006296815">0300-6296815</a></div>
 </section>
 
 <section id="urdu" class="ur">
@@ -136,7 +138,7 @@ Email: <a href="mailto:asam9rana@gmail.com">asam9rana@gmail.com</a> · Phone / W
   <li>پاس ورڈ سیدھا محفوظ نہیں ہوتا (ہیش)، بیک اپ پاس ورڈ سے انکرپٹڈ ہوتا ہے۔</li>
   <li>کیمرہ صرف گاہک / ضامن کی تصویر اور شناختی کارڈ کے لیے، کانٹیکٹس صرف نمبر چننے کے لیے، بلوٹوتھ صرف پرنٹر کے لیے۔ کلاؤڈ سنک آن ہو تو تصویریں چھوٹی کر کے صرف آپ کی دکان کی برانچ میں جاتی ہیں۔</li>
   <li>کوئی اشتہار نہیں، کوئی ٹریکنگ نہیں، ڈیٹا کسی کو بیچا نہیں جاتا۔</li>
-  <li>کلاؤڈ ڈیٹا یا اسٹاف اکاؤنٹ ختم کروانے کے لیے: <a href="mailto:asam9rana@gmail.com">asam9rana@gmail.com</a>
+  <li>کلاؤڈ ڈیٹا یا اسٹاف اکاؤنٹ ختم کروانے کے لیے: <a href="mailto:hannasolutions1@gmail.com">hannasolutions1@gmail.com</a>
       یا واٹس ایپ <a href="https://wa.me/923006296815">0300-6296815</a> — 30 دن کے اندر ختم کر دیا جائے گا۔</li>
 </ul>
 </section>
