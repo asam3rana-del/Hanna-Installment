@@ -52,7 +52,7 @@ cat > public/privacy.html <<'AHPOS_EOF'
 <body>
 <main>
 <h1>Hanna Installment — Privacy Policy</h1>
-<div class="meta">Developer: <b>Asam Hameed</b> (Hanna Solutions), Ibtisaam Traders, Bhikhi, District Sheikhupura, Pakistan · Last updated: 13 November 2026</div>
+<div class="meta">Developer: <b>Asam Hameed</b> (Hanna Solutions), Ibtisaam Traders, Bhikhi, District Sheikhupura, Pakistan · Last updated: 20 November 2026</div>
 <div class="lang"><a href="#english">English</a><a href="#urdu">اردو</a></div>
 
 <section id="english">
@@ -71,7 +71,6 @@ the owner adds. This policy explains what information the app handles, where it 
   <li><b>Installment plans:</b> the item sold (model, IMEI / serial / engine / chassis number), price, advance,
       schedule, payments received and late fines.</li>
   <li><b>Staff accounts:</b> username, display name and role. Passwords are stored only as a one-way hash, never as plain text.</li>
-  <li><b>Phone number for OTP login</b> (only if the shop turns OTP login on), verified through Google Firebase Authentication.</li>
   <li><b>A random device ID</b> created by Firebase, used to let a registered device sync with its own shop's data.</li>
 </ul>
 <p>The app does <b>not</b> show ads, does not use advertising or analytics trackers, and does not sell or rent any data.</p>
@@ -101,7 +100,7 @@ the owner adds. This policy explains what information the app handles, where it 
 </ul>
 
 <h2>4. Sharing</h2>
-<p>Information is shared only with the service providers needed to run the app — Google Firebase (database, login,
+<p>Information is shared only with the service providers needed to run the app — Google Firebase (database, anonymous device sign-in
 and hosting) — and only to provide those services. When the shop sends a bill or reminder by WhatsApp or SMS, that
 message goes through the app the shop chooses. We may disclose information if required by Pakistani law.</p>
 
