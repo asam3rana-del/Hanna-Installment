@@ -13,7 +13,11 @@ import 'dart:math' as math;
 const freqMonthly = 'monthly';
 const freqFortnightly = 'fortnightly';
 const freqWeekly = 'weekly';
-const planFrequencies = <String>[freqMonthly, freqFortnightly, freqWeekly];
+const freqDaily = 'daily'; // Step 30: rozana qist (rehri / chhota karobar)
+const planFrequencies = <String>[freqMonthly, freqFortnightly, freqWeekly, freqDaily];
+
+/// Qiston ki zyada se zyada ginti: rozana 400 tak (takreeban 13 mahine), baqi 60.
+int maxInstallments(String frequency) => frequency == freqDaily ? 400 : 60;
 
 const profitPercent = 'percent';
 const profitFixed = 'fixed';
@@ -45,6 +49,7 @@ DateTime addMonthsClamped(DateTime from, int months) {
 int dueDateOf(int firstDue, String frequency, int i) {
   final f = DateTime.fromMillisecondsSinceEpoch(firstDue);
   final d = switch (frequency) {
+    freqDaily => DateTime(f.year, f.month, f.day + i),
     freqWeekly => DateTime(f.year, f.month, f.day + 7 * i),
     freqFortnightly => DateTime(f.year, f.month, f.day + 15 * i),
     _ => addMonthsClamped(DateTime(f.year, f.month, f.day), i),
@@ -100,7 +105,8 @@ List<(int, double)> rescheduleLines({
   double extra = 0,
   int roundTo = 1,
 }) {
-  if (count < 1 || count > 60) throw ArgumentError('Qisten 1 se 60 tak.');
+  if (!planFrequencies.contains(frequency)) throw ArgumentError('Qist ka waqfa chunein.');
+  if (count < 1 || count > maxInstallments(frequency)) throw ArgumentError('Qisten 1 se ${maxInstallments(frequency)} tak.');
   if (!extra.isFinite) throw ArgumentError('Izafi raqam theek nahi.'); // minus = kam (saman badalne par sasta piece)
   if (firstDue <= 0) throw ArgumentError('Pehli qist ki tareekh chunein.');
   if (!planFrequencies.contains(frequency)) throw ArgumentError('Qist ka waqfa chunein.');
@@ -142,11 +148,12 @@ PlanQuote quotePlan({
   required double profitValue,
   required int count,
   int roundTo = 1,
+  String frequency = freqMonthly, // sirf ginti ki hadd ke liye (rozana 400 tak)
 }) {
   if (!cashPrice.isFinite || cashPrice <= 0) throw ArgumentError('Sale price likhein.');
   if (!advance.isFinite || advance < 0) throw ArgumentError('Advance minus nahi ho sakta.');
   if (advance >= cashPrice) throw ArgumentError('Advance poori qeemat ke barabar ya zyada hai — ye cash sale hai, qist nahi.');
-  if (count < 1 || count > 60) throw ArgumentError('Qisten 1 se 60 tak.');
+  if (count < 1 || count > maxInstallments(frequency)) throw ArgumentError('Qisten 1 se ${maxInstallments(frequency)} tak.');
   if (!profitValue.isFinite || profitValue < 0) throw ArgumentError('Munafa minus nahi ho sakta.');
   if (profitMode == profitPercent && profitValue > 300) throw ArgumentError('Munafa % bohat zyada hai.');
   final financed = _r2(cashPrice - advance);
@@ -339,7 +346,7 @@ String receiptText({
 
   String rs(double v) => 'Rs ${v == v.roundToDouble() ? v.round() : v.toStringAsFixed(2)}';
   final b = StringBuffer()
-    ..writeln(shopName.trim().isEmpty ? 'Qist Receipt' : shopName.trim())
+    ..writeln(shopName.trim().isEmpty ? 'Installment Receipt' : shopName.trim())
     ..writeln('------------------------')
     ..writeln('Plan: $planNo')
     ..writeln('Customer: $customerName')
@@ -347,13 +354,13 @@ String receiptText({
     ..writeln('Date: ${d(paidAt)}')
     ..writeln(kind == payDiscount
         ? 'Discount: ${rs(amount)}'
-        : '${kind == payAdvance ? 'Advance' : 'Qist'} received: ${rs(amount)} (${method == 'bank' ? 'Bank' : 'Cash'})');
+        : '${kind == payAdvance ? 'Advance' : 'Installment'} received: ${rs(amount)} (${method == 'bank' ? 'Bank' : 'Cash'})');
   if (fine > 0) b.writeln('Late fine: ${rs(fine)}');
   b.writeln('Remaining: ${rs(remaining)}');
-  if (nextDue != null && remaining > 0.5) b.writeln('Next qist: ${rs(nextAmount)} on ${d(nextDue)}');
-  if (remaining <= 0.5) b.writeln('Plan complete. Shukriya!');
+  if (nextDue != null && remaining > 0.5) b.writeln('Next installment: ${rs(nextAmount)} on ${d(nextDue)}');
+  if (remaining <= 0.5) b.writeln('Plan complete. Thank you!');
   b
     ..writeln('------------------------')
-    ..write('Shukriya — Hanna Installment');
+    ..write('Thank you — Hanna Installment');
   return b.toString();
 }

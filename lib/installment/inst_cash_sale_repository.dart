@@ -283,20 +283,20 @@ class CashSaleView {
 String cashSaleReceipt(CashSaleView v) {
   final s = v.sale;
   final b = StringBuffer('${AppInfo.appName}\n');
-  b.writeln('Naqd Sale Raseed — ${s.saleNo}');
+  b.writeln('Cash Sale Receipt — ${s.saleNo}');
   b.writeln(DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.fromMillisecondsSinceEpoch(s.soldAt)));
   if (s.customerName.isNotEmpty) b.writeln('Customer: ${s.customerName}${s.phone.isEmpty ? '' : ' (${s.phone})'}');
-  b.writeln('Saman: ${v.itemTitle}');
+  b.writeln('Item: ${v.itemTitle}');
   final it = v.item;
   if (it != null) {
-    if (it.color.isNotEmpty) b.writeln('Rang: ${it.color}');
+    if (it.color.isNotEmpty) b.writeln('Colour: ${it.color}');
     for (final e in it.idValues.entries) {
       if (e.value.trim().isNotEmpty) b.writeln('${e.key}: ${e.value}');
     }
-    if (it.warrantyMonths > 0) b.writeln('Warranty: ${it.warrantyMonths} mahine');
+    if (it.warrantyMonths > 0) b.writeln('Warranty: ${it.warrantyMonths} months');
   }
-  b.writeln('Qeemat: Rs ${s.price.round()} (${s.method == 'bank' ? 'Bank' : 'Cash'}) — poori adaa');
+  b.writeln('Price: Rs ${s.price.round()} (${s.method == 'bank' ? 'Bank' : 'Cash'}) — paid in full');
   if (s.note.isNotEmpty) b.writeln('Note: ${s.note}');
-  b.writeln('Shukriya!');
+  b.writeln('Thank you!');
   return b.toString();
 }

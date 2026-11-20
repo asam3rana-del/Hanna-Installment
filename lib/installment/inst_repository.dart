@@ -36,7 +36,7 @@ class InstRepository {
     final rows = await db.rawQuery('''
       SELECT c.id AS id, c.name AS name, c.phone AS phone,
              p.customerId AS pCustomerId, p.fatherName, p.cnic, p.phone2, p.address, p.occupation,
-             p.workAddress, p.monthlyIncome, p.note, p.createdAt, p.updatedAt,
+             p.workAddress, p.monthlyIncome, p.note, p.createdAt, p.updatedAt, p.khataNo, p.blockedReason, p.blockedAt,
              (SELECT COUNT(*) FROM inst_guarantors g WHERE g.customerId = c.id) AS gCount
       FROM customers c
       LEFT JOIN customer_profiles p ON p.customerId = c.id

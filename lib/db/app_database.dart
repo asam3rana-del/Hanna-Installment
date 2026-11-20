@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 46;
+  static const _dbVersion = 47;
 
   Database? _db;
 
@@ -654,6 +654,10 @@ class AppDatabase {
         await db.execute(sql);
       }
     }
+    if (oldVersion < 47) {
+      // v47: register ka khata number (customer profile).
+      await _addColumnIfMissing(db, 'customer_profiles', 'khataNo', "TEXT NOT NULL DEFAULT ''");
+    }
     // products.searchTag was added to _onCreate WITHOUT a migration step, so a database created by the
     // earliest builds (schema v1) never got the column. Found by the real-file migration test
     // (test/db_migration_fixtures_test.dart, legacy_v1.db). Idempotent: does nothing when the column exists.
@@ -981,7 +985,8 @@ class AppDatabase {
         updatedAt INTEGER NOT NULL DEFAULT 0,
         serverId TEXT,
         blockedReason TEXT NOT NULL DEFAULT '',
-        blockedAt INTEGER NOT NULL DEFAULT 0
+        blockedAt INTEGER NOT NULL DEFAULT 0,
+        khataNo TEXT NOT NULL DEFAULT ''
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_customer_profiles_cnic ON customer_profiles (cnic)',

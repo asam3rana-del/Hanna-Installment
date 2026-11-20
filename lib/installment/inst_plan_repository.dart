@@ -217,6 +217,7 @@ class InstPlanRepository {
       profitValue: profitValue,
       count: count,
       roundTo: roundTo,
+      frequency: frequency,
     );
     if (!planFrequencies.contains(frequency)) throw ArgumentError('Qist ka waqfa chunein.');
     if (firstDueDate <= 0) throw ArgumentError('Pehli qist ki tareekh chunein.');
@@ -678,6 +679,41 @@ class InstPlanRepository {
       await txn.update('inst_items', {'status': itemSold, 'updatedAt': _now()}, where: 'id = ?', whereArgs: [newItemId]);
       await InstSync.enqueueItem(txn, oldItemId);
       await InstSync.enqueueItem(txn, newItemId);
+      await InstSync.enqueuePlan(txn, planId);
+    });
+    _changed();
+  }
+
+  /// Ek qist ki tareekh badalna (Step 30, admin / manager). [shiftRest] = is ke baad wali sab qisten bhi utne hi
+  /// din aage / peeche. Tarteeb na toote: pichhli qist se pehle ya (akeli badle to) agli qist ke baad nahi.
+  Future<void> setDueDate(int planId, int seq, int newDate, {bool shiftRest = false}) async {
+    await LicenseService.instance.requireWritable();
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager qist ki tareekh badal sakta hai.');
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query('inst_schedule', where: 'planId = ?', whereArgs: [planId], orderBy: 'seq');
+    final i = rows.indexWhere((r) => ((r['seq'] as num?) ?? 0).toInt() == seq);
+    if (i < 0) throw ArgumentError('Qist nahi mili.');
+    final old = ((rows[i]['dueDate'] as num?) ?? 0).toInt();
+    final nd = DateTime.fromMillisecondsSinceEpoch(newDate);
+    final day = DateTime(nd.year, nd.month, nd.day).millisecondsSinceEpoch;
+    if (day == old) return;
+    if (i > 0 && day < ((rows[i - 1]['dueDate'] as num?) ?? 0).toInt()) {
+      throw ArgumentError('Ye tareekh pichhli qist se pehle hai.');
+    }
+    if (!shiftRest && i + 1 < rows.length && day > ((rows[i + 1]['dueDate'] as num?) ?? 0).toInt()) {
+      throw ArgumentError('Ye tareekh agli qist ke baad hai — "baad wali bhi khiskayein" chunein.');
+    }
+    final shiftDays = DateTime.fromMillisecondsSinceEpoch(day).difference(DateTime.fromMillisecondsSinceEpoch(old)).inDays;
+    await db.transaction((txn) async {
+      for (var k = i; k < rows.length; k++) {
+        if (k > i && !shiftRest) break;
+        final d0 = DateTime.fromMillisecondsSinceEpoch(((rows[k]['dueDate'] as num?) ?? 0).toInt());
+        final nd2 = k == i ? day : DateTime(d0.year, d0.month, d0.day + shiftDays).millisecondsSinceEpoch;
+        await txn.update('inst_schedule', {'dueDate': nd2}, where: 'planId = ? AND seq = ?', whereArgs: [planId, rows[k]['seq']]);
+      }
+      final upd = <String, Object?>{'updatedAt': _now()};
+      if (i == 0) upd['firstDueDate'] = day;
+      await txn.update('inst_plans', upd, where: 'id = ?', whereArgs: [planId]);
       await InstSync.enqueuePlan(txn, planId);
     });
     _changed();

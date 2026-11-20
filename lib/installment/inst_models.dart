@@ -326,6 +326,9 @@ class CustomerProfile {
   final int createdAt;
   final int updatedAt;
 
+  /// Dukaan ke purane register ka khata number (v47) — search mein bhi.
+  final String khataNo;
+
   /// Blacklist (v45): khali nahi = customer block (wajah). Sirf [InstRepository.setBlocked] likhta hai —
   /// [toMap] mein nahi, taake profile edit karne se block na hatay.
   final String blockedReason;
@@ -344,6 +347,7 @@ class CustomerProfile {
     this.note = '',
     this.createdAt = 0,
     this.updatedAt = 0,
+    this.khataNo = '',
     this.blockedReason = '',
     this.blockedAt = 0,
   });
@@ -358,6 +362,7 @@ class CustomerProfile {
         'workAddress': workAddress,
         'monthlyIncome': monthlyIncome,
         'note': note,
+        'khataNo': khataNo.trim(),
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
@@ -374,6 +379,7 @@ class CustomerProfile {
         note: (m['note'] as String?) ?? '',
         createdAt: ((m['createdAt'] as num?) ?? 0).toInt(),
         updatedAt: ((m['updatedAt'] as num?) ?? 0).toInt(),
+        khataNo: (m['khataNo'] as String?) ?? '',
         blockedReason: (m['blockedReason'] as String?) ?? '',
         blockedAt: ((m['blockedAt'] as num?) ?? 0).toInt(),
       );
@@ -399,8 +405,10 @@ class InstCustomerRow {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return true;
     final p = profile;
-    final hay = '$name ${p?.fatherName ?? ''} ${p?.address ?? ''}'.toLowerCase();
+    final hay = '$name ${p?.fatherName ?? ''} ${p?.address ?? ''} ${p?.khataNo ?? ''}'.toLowerCase();
     if (q.split(RegExp(r'\s+')).every(hay.contains)) return true;
+    final k = (p?.khataNo ?? '').trim().toLowerCase();
+    if (k.isNotEmpty && k == q) return true;
     final dq = q.replaceAll(RegExp(r'\D'), '');
     if (dq.length < 3) return false;
     final digits = '${phone.replaceAll(RegExp(r'\D'), '')} '

@@ -253,19 +253,19 @@ class _InstScanSaleScreenState extends State<InstScanSaleScreen> {
           Row(children: [
             Expanded(
               child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: p.tealDark, minimumSize: const Size.fromHeight(46)),
-                onPressed: () => _go(InstNewCashSaleScreen(itemId: it.id)),
-                icon: const Icon(Icons.point_of_sale),
-                label: Text(Loc.t('Cash sale', 'نقد سیل')),
+                style: FilledButton.styleFrom(backgroundColor: p.teal, minimumSize: const Size.fromHeight(46)),
+                onPressed: () => _go(NewInstallmentScreen(itemId: it.id)),
+                icon: const Icon(Icons.add_card),
+                label: Text(Loc.t('On installment', 'قسط پر')),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: p.navy, minimumSize: const Size.fromHeight(46)),
-                onPressed: () => _go(NewInstallmentScreen(itemId: it.id)),
-                icon: const Icon(Icons.add_card),
-                label: Text(Loc.t('On installment', 'قسط پر')),
+                style: FilledButton.styleFrom(backgroundColor: p.navyLight, minimumSize: const Size.fromHeight(46)),
+                onPressed: () => _go(InstNewCashSaleScreen(itemId: it.id)),
+                icon: const Icon(Icons.point_of_sale),
+                label: Text(Loc.t('Cash sale', 'نقد سیل')),
               ),
             ),
           ])

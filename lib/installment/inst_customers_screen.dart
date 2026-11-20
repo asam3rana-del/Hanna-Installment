@@ -16,6 +16,7 @@ import 'inst_cash_sale_screens.dart';
 import 'inst_models.dart';
 import 'inst_photo_widgets.dart';
 import 'inst_plans_screen.dart';
+import 'inst_plan_math.dart' show planActive, planCompleted, planRepossessed;
 import 'inst_plan_repository.dart';
 import 'inst_repository.dart';
 import 'inst_ui.dart';
@@ -132,6 +133,7 @@ class _InstCustomersScreenState extends State<InstCustomersScreen> {
       if (prof != null && prof.fatherName.isNotEmpty) '${Loc.t('s/o', 'ولد')} ${prof.fatherName}',
       if (r.phone.isNotEmpty) r.phone,
       if (prof != null && prof.cnic.isNotEmpty) prof.cnic,
+      if (prof != null && prof.khataNo.isNotEmpty) '${Loc.t('Khata', 'کھاتہ')} ${prof.khataNo}',
     ].join('  •  ');
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -190,6 +192,7 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
   late final _name = TextEditingController(text: widget.existing?.name ?? '');
   late final _father = TextEditingController(text: widget.profile?.fatherName ?? '');
   late final _cnic = TextEditingController(text: widget.profile?.cnic ?? '');
+  late final _khata = TextEditingController(text: widget.profile?.khataNo ?? '');
   late final _phone = TextEditingController(text: widget.existing?.phone ?? '');
   late final _phone2 = TextEditingController(text: widget.profile?.phone2 ?? '');
   late final _address = TextEditingController(text: widget.profile?.address ?? '');
@@ -244,7 +247,7 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _father, _cnic, _phone, _phone2, _address, _occupation, _workAddress, _income, _note]) {
+    for (final c in [_name, _father, _cnic, _khata, _phone, _phone2, _address, _occupation, _workAddress, _income, _note]) {
       c.dispose();
     }
     super.dispose();
@@ -257,6 +260,7 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
       customerId: widget.existing?.id ?? 0,
       fatherName: _father.text,
       cnic: _cnic.text,
+      khataNo: _khata.text,
       phone2: _phone2.text,
       address: _address.text,
       occupation: _occupation.text,
@@ -317,6 +321,11 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [CnicInputFormatter()],
               decoration: instDeco(p, Loc.t('CNIC', 'شناختی کارڈ نمبر'), hint: '35202-1234567-1'),
+            ),
+            gap(),
+            TextField(
+              controller: _khata,
+              decoration: instDeco(p, Loc.t('Register khata no.', 'رجسٹر کھاتہ نمبر'), hint: Loc.t('optional', 'اختیاری')),
             ),
             instSectionTitle(p, Loc.t('CONTACT', 'رابطہ')),
             TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: instDeco(p, Loc.t('Phone', 'فون'), hint: '03xx xxxxxxx')),
@@ -473,6 +482,43 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
     }
   }
 
+  /// Customer ki poori history (Step 30): kitne plan (chalte / mukammal / wapas), kul kharida, kul diya, baqi, late.
+  /// Ek bande ke kai plan isi screen par neeche ek saath.
+  Widget _historyCard(AppPalette p) {
+    final active = _plans.where((v) => v.plan.status == planActive).toList();
+    final done = _plans.where((v) => v.plan.status == planCompleted).length;
+    final back = _plans.where((v) => v.plan.status == planRepossessed).length;
+    final bought = _plans.fold<double>(0, (a, v) => a + v.plan.totalPrice);
+    final paid = _plans.fold<double>(0, (a, v) => a + v.advancePaid + v.status.paid);
+    final left = active.fold<double>(0, (a, v) => a + v.status.remaining);
+    final late = active.where((v) => v.status.overdue > 0.5).length;
+    Widget cell(String label, String value, Color c) => Expanded(
+          child: Column(children: [
+            Text(value, style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(label, textAlign: TextAlign.center, style: TextStyle(color: p.textMuted, fontSize: 11)),
+          ]),
+        );
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: instCard(p),
+      child: Column(children: [
+        Row(children: [
+          cell(Loc.t('Running', 'جاری'), '${active.length}', p.navy),
+          cell(Loc.t('Completed', 'مکمل'), '$done', p.teal),
+          cell(Loc.t('Taken back', 'واپس لیا'), '$back', back > 0 ? p.red : p.textMuted),
+          cell(Loc.t('Late now', 'ابھی لیٹ'), '$late', late > 0 ? p.red : p.textMuted),
+        ]),
+        const Divider(),
+        Row(children: [
+          cell(Loc.t('Total bought', 'کل خریدا'), instRs(bought), p.textDark),
+          cell(Loc.t('Total paid', 'کل ادا'), instRs(paid), p.teal),
+          cell(Loc.t('Remaining', 'باقی'), instRs(left), left > 0.5 ? p.amber : p.teal),
+        ]),
+      ]),
+    );
+  }
+
   Future<void> _call(String phone) async {
     final d = phone.replaceAll(RegExp(r'[^0-9+]'), '');
     if (d.isEmpty) return;
@@ -532,6 +578,7 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                           onPressed: () => _call(c.phone),
                         ),
                       instSectionTitle(p, Loc.t('INSTALLMENT PLANS', 'قسط پلان')),
+                      if (_plans.isNotEmpty) _historyCard(p),
                       for (final v in _plans)
                         PlanTile(
                           view: v,
@@ -630,6 +677,7 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
         const Divider(height: 24),
         instInfoLine(p, Loc.t('Phone', 'فون'), c.phone),
         if (pr != null) ...[
+          instInfoLine(p, Loc.t('Khata no.', 'کھاتہ نمبر'), pr.khataNo),
           instInfoLine(p, Loc.t('Second phone', 'دوسرا فون'), pr.phone2),
           instInfoLine(p, Loc.t('Address', 'پتہ'), pr.address),
           instInfoLine(p, Loc.t('Job / business', 'روزگار'), pr.occupation),

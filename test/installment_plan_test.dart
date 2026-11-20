@@ -168,4 +168,14 @@ void main() {
       expect(l.skip(2).map((x) => x.$2).toList(), [1500, 1500]);
     });
   });
+
+  test('daily plan (Step 30): har din ek qist, 400 tak', () {
+    final d0 = DateTime(2026, 12, 30).millisecondsSinceEpoch;
+    expect(DateTime.fromMillisecondsSinceEpoch(dueDateOf(d0, freqDaily, 3)), DateTime(2027, 1, 2));
+    final q = quotePlan(cashPrice: 10000, advance: 1000, profitMode: profitFixed, profitValue: 0, count: 90, frequency: freqDaily);
+    expect(q.count, 90);
+    expect(() => quotePlan(cashPrice: 10000, advance: 0, profitMode: profitFixed, profitValue: 0, count: 90), throwsArgumentError);
+    expect(() => quotePlan(cashPrice: 10000, advance: 0, profitMode: profitFixed, profitValue: 0, count: 401, frequency: freqDaily),
+        throwsArgumentError);
+  });
 }

@@ -88,6 +88,7 @@ class InstSync {
       'createdAt': _i(p['createdAt']),
       'blockedReason': _s(p['blockedReason']),
       'blockedAt': _i(p['blockedAt']),
+      'khataNo': _s(p['khataNo']),
     }));
   }
 
@@ -573,6 +574,7 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       'monthlyIncome': _d(d['monthlyIncome']),
       'blockedReason': _s(d['blockedReason']),
       'blockedAt': _i(d['blockedAt']),
+      'khataNo': _s(d['khataNo']),
       'updatedAt': _i(d['updatedAt']),
       'serverId': sid,
     };

@@ -13,7 +13,7 @@ import 'package:hanna_installment/db/app_database.dart';
 ///   2. close it and "rewind" the file to look like schema vN (drop everything added by migrations > N,
 ///      PRAGMA user_version = N),
 ///   3. re-open through AppDatabase, which runs the real _onUpgrade,
-///   4. require: user_version == 46, integrity_check ok, no FK violations, schema identical to a fresh
+///   4. require: user_version == 47, integrity_check ok, no FK violations, schema identical to a fresh
 ///      install, and every seeded row unchanged.
 ///
 /// Limits (be honest): rewinding is derived from the migration code, not from real old database files, so
@@ -40,6 +40,7 @@ void main() {
 
   // ---- what each migration step added (version -> things to remove when rewinding below it) ----
   final steps = <_Step>[
+    _Step(47, columns: {'customer_profiles': ['khataNo']}),
     _Step(46, tables: ['inst_securities']),
     _Step(45, columns: {'customer_profiles': ['blockedReason', 'blockedAt']}),
     _Step(44, columns: {'inst_cash_sales': ['returnedAt', 'refund', 'returnNote', 'refundCashTxId']}),
@@ -177,7 +178,7 @@ void main() {
   test('fresh install: schema version, integrity, default seed rows', () async {
     final db = await AppDatabase.instance.database;
     await expectHealthy(db);
-    expect(AppDatabase.schemaVersion, 46);
+    expect(AppDatabase.schemaVersion, 47);
     expect((await db.query('categories')).map((r) => r['name']), contains('General'));
     expect((await db.query('units')).map((r) => r['name']), contains('pcs'));
   });

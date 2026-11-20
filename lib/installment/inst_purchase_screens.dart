@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +12,7 @@ import 'inst_models.dart';
 import 'inst_pdf.dart';
 import 'inst_purchase_repository.dart';
 import 'inst_repository.dart';
+import 'inst_scan.dart';
 import 'inst_ui.dart';
 
 /// Khareed (purchase): bill list, naya bill (kai pieces), bill ki tafseel, suppliers aur un ka khata.
@@ -262,6 +265,31 @@ class _InstNewPurchaseScreenState extends State<InstNewPurchaseScreen> {
   /// Pichle piece jaisa naya (model / qeemat wahi, IMEI khali).
   Future<void> _copy(InstItem it) => _addPiece(template: it.copyWith(idValues: const {}));
 
+  /// Ek hi model ke kai pieces (Step 30): model / rang / qeemat aakhri piece wali, sirf har dabbe ka IMEI scan karte
+  /// jao — har scan par ek piece list mein. Wapas aane par ruk jata hai. IMEI pehle se list / stock mein ho to chhor.
+  Future<void> _scanMany() async {
+    if (_items.isEmpty) return;
+    final last = _items.last;
+    final cat = _cats.where((c) => c.id == last.categoryId).firstOrNull;
+    final field = cat != null && cat.idFields.isNotEmpty
+        ? cat.idFields.first
+        : (last.idValues.keys.isNotEmpty ? last.idValues.keys.first : 'IMEI 1');
+    final imei = field.toLowerCase().contains('imei');
+    var added = 0;
+    while (mounted) {
+      final have = {for (final it in _items) ...it.idValues.values.map(normalizeIdValue)};
+      final code = await Navigator.of(context).push<String>(MaterialPageRoute(
+          builder: (_) => InstBarcodeScanPage(
+              accept: (v) =>
+                  (imei ? RegExp(r'^\d{15}$').hasMatch(v.trim()) : v.trim().length >= 4) && !have.contains(normalizeIdValue(v)))));
+      if (code == null || !mounted) break;
+      setState(() => _items.add(last.copyWith(idValues: {field: code.trim()})));
+      added++;
+      instToast(context, Loc.t('Added ${_items.length} — scan the next box', '${_items.length} شامل — اگلا ڈبہ اسکین کریں'));
+    }
+    if (added > 0 && mounted) instToast(context, Loc.t('$added pieces added', '$added پیس شامل ہوئے'));
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final d = await showDatePicker(
@@ -384,11 +412,30 @@ class _InstNewPurchaseScreenState extends State<InstNewPurchaseScreen> {
                         ]),
                       ),
                     ),
+                  if (_items.isNotEmpty) ...[
+                    // Same model: rate dobara na likhna pare.
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(backgroundColor: p.teal, minimumSize: const Size.fromHeight(48)),
+                      onPressed: () => _copy(_items.last),
+                      icon: const Icon(Icons.copy_all_outlined),
+                      label: Text(Loc.t('Same model again (only new IMEI)', 'یہی ماڈل دوبارہ (صرف نیا IMEI)')),
+                    ),
+                    if (Platform.isAndroid || Platform.isIOS) ...[
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(backgroundColor: p.navyLight, minimumSize: const Size.fromHeight(48)),
+                        onPressed: _scanMany,
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: Text(Loc.t('Same model: scan many boxes', 'یہی ماڈل: کئی ڈبے اسکین کریں')),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                  ],
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     onPressed: () => _addPiece(),
                     icon: const Icon(Icons.add),
-                    label: Text(Loc.t('Add piece', 'پیس شامل کریں')),
+                    label: Text(_items.isEmpty ? Loc.t('Add piece', 'پیس شامل کریں') : Loc.t('Different model', 'دوسرا ماڈل')),
                   ),
                   instSectionTitle(p, Loc.t('PAYMENT', 'ادائیگی')),
                   Container(

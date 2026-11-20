@@ -21,6 +21,7 @@ import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
 import 'inst_purchase_screens.dart';
 import 'inst_report_screens.dart';
+import 'inst_home_search.dart';
 import 'inst_scan.dart';
 import 'inst_bulk_remind.dart';
 import 'inst_security_screens.dart';
@@ -238,6 +239,29 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     );
   }
 
+  /// "More": baqi tiles neeche ki sheet mein.
+  Future<void> _more(AppPalette p, List<_Tile> more) async {
+    final t = await showModalBottomSheet<_Tile>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            for (final x in more)
+              ListTile(
+                leading: Icon(x.icon, color: x.color),
+                title: Text(x.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(x.subtitle),
+                onTap: () => Navigator.pop(ctx, x),
+              ),
+          ]),
+        ),
+      ),
+    );
+    t?.onTap();
+  }
+
   Future<void> _push(Widget w) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
     await _load();
@@ -254,39 +278,52 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     final p = ThemeManager.palette;
     final width = MediaQuery.of(context).size.width;
     final cols = width >= 1000 ? 4 : (width >= 640 ? 3 : 2);
-    final tiles = <_Tile>[
-      _Tile(Icons.add_card, Loc.t('New Installment', 'نئی قسط'), Loc.t('Customer + item + plan', 'کسٹمر + سامان + پلان'), p.teal,
-          () => _push(const NewInstallmentScreen())),
-      _Tile(Icons.swap_vert_circle_outlined, Loc.t('Pay / Receive', 'لینا / دینا'), Loc.t('Collect, pay, returns', 'وصولی، ادائیگی، واپسی'), p.teal,
-          _payReceive),
-      _Tile(Icons.request_quote_outlined, Loc.t('Installments', 'قسطیں'), Loc.t('${_col.activePlans} active plans', '${_col.activePlans} جاری پلان'), p.navy,
-          () => _push(const InstPlansScreen())),
-      _Tile(Icons.point_of_sale, Loc.t('Cash Sale', 'نقد سیل'), Loc.t('Sell without installments', 'بغیر قسط بیچیں'), p.tealDark,
-          () => _push(const InstCashSalesScreen())),
-      _Tile(Icons.qr_code_scanner, Loc.t('Scan & Sell', 'اسکین سے سیل'), Loc.t('Scan IMEI -> cash / qist', 'IMEI اسکین -> نقد / قسط'), p.purple,
-          () => _push(const InstScanSaleScreen())),
+    // Step 30: 8 main tiles + "More" (baqi sab). Purchase + stock ek hi jagah (purchase se stock khud banta hai).
+    final mgr = Session.isAdminOrManager;
+    final tNew = _Tile(Icons.add_card, Loc.t('New Installment', 'نئی قسط'), Loc.t('Qist or cash sale', 'قسط یا نقد سیل'), p.teal,
+        () => _push(const NewInstallmentScreen()));
+    final tPayRec = _Tile(Icons.swap_vert_circle_outlined, Loc.t('Pay / Receive', 'لینا / دینا'), Loc.t('Collect, pay, returns', 'وصولی، ادائیگی، واپسی'), p.teal,
+        _payReceive);
+    final tCustomers = _Tile(Icons.people_alt_outlined, Loc.t('Customers', 'کسٹمرز'), Loc.t('All plans, history', 'سب پلان، ہسٹری'), p.purple,
+        () => _push(const InstCustomersScreen()));
+    final tPurchases = _Tile(Icons.local_shipping_outlined, Loc.t('Purchase / Stock', 'خریداری / اسٹاک'), Loc.t('Buy -> stock auto', 'خریداری سے اسٹاک خود'), p.tealDark,
+        () => _push(const InstPurchasesScreen()));
+    final tStock = _Tile(Icons.inventory_2_outlined, Loc.t('Stock', 'اسٹاک'), Loc.t('Mobiles, bikes, LCDs...', 'موبائل، بائیک، ایل سی ڈی'), p.blue,
+        () => _push(const InstItemsScreen()));
+    final tReports = _Tile(Icons.insights_outlined, Loc.t('Reports', 'رپورٹس'), Loc.t('Profit, sale, stock, dues', 'منافع، سیل، اسٹاک، قسطیں'), p.navyLight,
+        () => _push(const InstReportsHubScreen()));
+    final tPlans = _Tile(Icons.request_quote_outlined, Loc.t('Installments', 'قسطیں'), Loc.t('${_col.activePlans} active plans', '${_col.activePlans} جاری پلان'), p.navy,
+        () => _push(const InstPlansScreen()));
+    final tScan = _Tile(Icons.qr_code_scanner, Loc.t('Scan & Sell', 'اسکین سے سیل'), Loc.t('Scan IMEI -> qist / cash', 'IMEI اسکین -> قسط / نقد'), p.purple,
+        () => _push(const InstScanSaleScreen()));
+    final tRemind = _Tile(Icons.send_to_mobile_outlined, Loc.t('Send Reminders', 'یاد دہانی بھیجیں'), Loc.t('WhatsApp to all due', 'سب کو واٹس ایپ'), p.teal,
+        () => _push(const InstBulkRemindScreen()));
+    final tCheques = _Tile(Icons.payments_outlined, Loc.t('Cheques & Docs', 'چیک اور کاغذات'), Loc.t('Security held by shop', 'دکان کے پاس ضمانت'), p.navyLight,
+        () => _push(const InstHeldSecuritiesScreen()));
+    final more = <_Tile>[
+      if (mgr) tPlans,
       _Tile(Icons.format_list_numbered, Loc.t('Collection List', 'وصولی لسٹ'), Loc.t('Who to collect from', 'کس سے کتنا لینا ہے'), p.blue,
           () => _push(const InstCollectionListScreen())),
-      _Tile(Icons.send_to_mobile_outlined, Loc.t('Send Reminders', 'یاد دہانی بھیجیں'), Loc.t('WhatsApp to all due', 'سب کو واٹس ایپ'), p.teal,
-          () => _push(const InstBulkRemindScreen())),
-      _Tile(Icons.payments_outlined, Loc.t('Cheques & Docs', 'چیک اور کاغذات'), Loc.t('Security held by shop', 'دکان کے پاس ضمانت'), p.navyLight,
-          () => _push(const InstHeldSecuritiesScreen())),
       _Tile(Icons.report_gmailerrorred_outlined, Loc.t('Defaulters', 'ڈیفالٹرز'), Loc.t('Late + guarantor phones', 'لیٹ + ضامن کے فون'), p.red,
           () => _push(const InstDefaultersScreen())),
-      if (Session.isAdminOrManager)
-        _Tile(Icons.insights_outlined, Loc.t('Reports', 'رپورٹس'), Loc.t('Profit, sale, stock, dues', 'منافع، سیل، اسٹاک، قسطیں'), p.navyLight,
-            () => _push(const InstReportsHubScreen())),
-      _Tile(Icons.people_alt_outlined, Loc.t('Customers', 'کسٹمرز'), Loc.t('CNIC, guarantors', 'شناختی کارڈ، ضامن'), p.purple,
-          () => _push(const InstCustomersScreen())),
-      _Tile(Icons.inventory_2_outlined, Loc.t('Stock', 'اسٹاک'), Loc.t('Mobiles, bikes, LCDs...', 'موبائل، بائیک، ایل سی ڈی'), p.blue,
-          () => _push(const InstItemsScreen())),
-      if (Session.isAdminOrManager)
-        _Tile(Icons.local_shipping_outlined, Loc.t('Purchases', 'خریداری'), Loc.t('Bills, suppliers, payable', 'بل، سپلائر، ادھار'), p.tealDark,
-            () => _push(const InstPurchasesScreen())),
+      if (mgr) tStock,
+      _Tile(Icons.point_of_sale, Loc.t('Cash Sales', 'نقد سیلز'), Loc.t('List, returns', 'لسٹ، واپسی'), p.tealDark,
+          () => _push(const InstCashSalesScreen())),
       _Tile(Icons.category_outlined, Loc.t('Categories', 'کیٹیگریز'), Loc.t('IMEI / serial fields', 'IMEI / سیریل فیلڈز'), p.amber,
           () => _push(const InstCategoriesScreen())),
       _Tile(Icons.storefront_outlined, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, backup', 'کیش، خرچے، اسٹاف، بیک اپ'), p.orange,
           () => _push(const InstShopToolsScreen())),
+    ];
+    final tiles = <_Tile>[
+      tNew,
+      tPayRec,
+      tCustomers,
+      mgr ? tPurchases : tStock,
+      mgr ? tReports : tPlans,
+      tScan,
+      tRemind,
+      tCheques,
+      _Tile(Icons.apps, Loc.t('More', 'مزید'), Loc.t('All other options', 'باقی سب'), p.textMuted, () => _more(p, more)),
     ];
     return Scaffold(
       backgroundColor: p.bg,
@@ -333,6 +370,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
           child: RefreshIndicator(
             onRefresh: _load,
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
+              const InstHomeSearch(),
               Row(children: [
                 Expanded(
                   child: _tapStat(p, Loc.t('Due today', 'آج کی قسطیں'), instRs(_col.dueToday),

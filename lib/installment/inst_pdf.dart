@@ -357,17 +357,18 @@ class InstPdf {
     await PartyPhotoStore.instance.ensureLoaded();
     final face = await _img(PartyPhotoStore.instance.pathFor(true, v.plan.customerId));
     final next = v.status.next;
+    // Receipt hamesha English mein (Step 30) — customer / doosre log aasani se parh sakein.
 
     List<pw.Widget> build() => [
-          _header(shop, Loc.t('Receipt', 'رسید'), '${v.plan.planNo}-${pay.id}'),
+          _header(shop, 'Receipt', '${v.plan.planNo}-${pay.id}'),
           pw.SizedBox(height: 8),
           pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.Expanded(
               child: pw.Column(children: [
-                _kv(Loc.t('Customer', 'خریدار'), v.customerName, bold: true),
-                _kv(Loc.t('Item', 'سامان'), v.itemTitle),
-                if (v.item != null && v.item!.primaryId.isNotEmpty) _kv(Loc.t('ID', 'نمبر'), v.item!.primaryId),
-                _kv(Loc.t('Date', 'تاریخ'), DateFormat('dd-MM-yyyy  h:mm a').format(DateTime.fromMillisecondsSinceEpoch(pay.paidAt))),
+                _kv('Customer', v.customerName, bold: true),
+                _kv('Item', v.itemTitle),
+                if (v.item != null && v.item!.primaryId.isNotEmpty) _kv('ID', v.item!.primaryId),
+                _kv('Date', DateFormat('dd-MM-yyyy  h:mm a').format(DateTime.fromMillisecondsSinceEpoch(pay.paidAt))),
               ]),
             ),
             if (face != null) _photo(face, 54, 64, ''),
@@ -377,21 +378,21 @@ class InstPdf {
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: _teal, width: 1), borderRadius: pw.BorderRadius.circular(6)),
             child: pw.Column(children: [
-              _kv(pay.kind == payAdvance ? Loc.t('Advance', 'ایڈوانس') : (pay.kind == payDiscount ? Loc.t('Discount', 'رعایت') : Loc.t('Qist received', 'قسط وصول')), _rs(pay.amount), bold: true, argb: 0xFF0F9B8E),
-              if (pay.fine > 0) _kv(Loc.t('Late fine', 'لیٹ جرمانہ'), _rs(pay.fine)),
-              _kv(Loc.t('Total', 'کل'), _rs(pay.amount + pay.fine), bold: true),
-              _kv(Loc.t('Method', 'طریقہ'), pay.method == 'bank' ? Loc.t('Bank', 'بینک') : Loc.t('Cash', 'کیش')),
-              if (pay.receivedBy.isNotEmpty) _kv(Loc.t('Received by', 'وصول کنندہ'), pay.receivedBy),
+              _kv(pay.kind == payAdvance ? 'Advance' : (pay.kind == payDiscount ? 'Discount' : 'Installment received'), _rs(pay.amount), bold: true, argb: 0xFF0F9B8E),
+              if (pay.fine > 0) _kv('Late fine', _rs(pay.fine)),
+              _kv('Total', _rs(pay.amount + pay.fine), bold: true),
+              _kv('Method', pay.method == 'bank' ? 'Bank' : 'Cash'),
+              if (pay.receivedBy.isNotEmpty) _kv('Received by', pay.receivedBy),
             ]),
           ),
-          _kv(Loc.t('Remaining', 'باقی'), _rs(remainingAfter), bold: true, argb: remainingAfter > 0.5 ? 0xFF2E3242 : 0xFF0F9B8E),
+          _kv('Remaining', _rs(remainingAfter), bold: true, argb: remainingAfter > 0.5 ? 0xFF2E3242 : 0xFF0F9B8E),
           if (remainingAfter > 0.5 && next != null)
-            _kv(Loc.t('Next qist', 'اگلی قسط'), '${_rs(next.remaining)}  —  ${_d(next.dueDate)}'),
-          if (remainingAfter <= 0.5) pw.Padding(padding: const pw.EdgeInsets.only(top: 6), child: _t(Loc.t('Plan complete. Thank you!', 'پلان مکمل۔ شکریہ!'), size: 12, bold: true, argb: 0xFF0F9B8E)),
+            _kv('Next installment', '${_rs(next.remaining)}  —  ${_d(next.dueDate)}'),
+          if (remainingAfter <= 0.5) pw.Padding(padding: const pw.EdgeInsets.only(top: 6), child: _t('Plan complete. Thank you!', size: 12, bold: true, argb: 0xFF0F9B8E)),
           if (v.status.overdue > 0.5)
             pw.Padding(
               padding: const pw.EdgeInsets.only(top: 6),
-              child: _t(Loc.t('Late amount: ${_rs(v.status.overdue)}', 'لیٹ رقم: ${_rs(v.status.overdue)}'), size: 10, bold: true, argb: 0xFFD64545),
+              child: _t('Late amount: ${_rs(v.status.overdue)}', size: 10, bold: true, argb: 0xFFD64545),
             ),
         ];
 

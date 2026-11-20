@@ -18,6 +18,8 @@ import 'inst_photo_widgets.dart';
 import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
 import 'inst_reports.dart' show profitShare;
+import 'inst_cash_sale_repository.dart';
+import 'inst_cash_sale_screens.dart';
 import 'inst_repository.dart';
 import 'inst_security_screens.dart';
 import 'inst_ui.dart';
@@ -29,6 +31,7 @@ String _dt(int ms) => DateFormat('dd MMM yyyy, h:mm a').format(DateTime.fromMill
 String freqLabel(String f) => switch (f) {
       freqWeekly => Loc.t('Weekly', 'ہفتہ وار'),
       freqFortnightly => Loc.t('Every 15 days', 'ہر 15 دن'),
+      freqDaily => Loc.t('Daily', 'روزانہ'),
       _ => Loc.t('Monthly', 'ماہانہ'),
     };
 
@@ -292,6 +295,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
 
   final _cash = TextEditingController();
   final _advance = TextEditingController();
+  /// Step 30: form hamesha Qist par; Naqd chunein to isi form se cash sale (customer, item, qeemat).
+  bool _cashSale = false;
   final _count = TextEditingController(text: '12');
   final _lateFee = TextEditingController();
   final _grace = TextEditingController(); // form se hata diya: koi jurmana / riayat nahi
@@ -388,6 +393,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
         profitValue: _effProfit,
         count: int.tryParse(_count.text.trim()) ?? 0,
         roundTo: _roundTo,
+        frequency: _freq,
       );
     } catch (_) {
       return null;
@@ -403,6 +409,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
         profitValue: _effProfit,
         count: int.tryParse(_count.text.trim()) ?? 0,
         roundTo: _roundTo,
+        frequency: _freq,
       );
       return null;
     } catch (e) {
@@ -488,6 +495,34 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
   }
 
   // ---------------------------------------------------------------- save
+
+  /// Naqd sale isi form se (Step 30): customer ikhtiyari, piece aur qeemat zaroori. Ban kar us ki raseed khulti hai.
+  Future<void> _saveCash() async {
+    if (_saving) return;
+    final it = _item;
+    if (it == null || it.id == null) return instToast(context, Loc.t('Choose an item.', 'سامان چنیں۔'));
+    final price = instParse(_cash.text);
+    if (price <= 0) return instToast(context, Loc.t('Write the price.', 'قیمت لکھیں۔'));
+    final c = _customer;
+    setState(() => _saving = true);
+    try {
+      final id = await InstCashSaleRepository.instance.sell(
+        itemId: it.id!,
+        price: price,
+        customerId: c?.id,
+        customerName: c?.name ?? '',
+        phone: c?.phone ?? '',
+        method: _advanceMethod,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => InstCashSaleDetailScreen(saleId: id)));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        instToast(context, instErr(e));
+      }
+    }
+  }
 
   Future<void> _save() async {
     if (_saving) return;
@@ -591,17 +626,66 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
     return Scaffold(
       backgroundColor: p.bg,
       body: Column(children: [
-        instHeader(context, p, Loc.t('New Installment', 'نئی قسط'), Loc.t('Customer → item → plan', 'کسٹمر ← سامان ← پلان')),
+        instHeader(context, p, _cashSale ? Loc.t('Cash Sale', 'نقد سیل') : Loc.t('New Installment', 'نئی قسط'),
+            Loc.t('Customer → item → plan', 'کسٹمر ← سامان ← پلان')),
         Expanded(
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(value: false, icon: const Icon(Icons.add_card), label: Text(Loc.t('Installment', 'قسط'))),
+                ButtonSegment(value: true, icon: const Icon(Icons.point_of_sale), label: Text(Loc.t('Cash sale', 'نقد سیل'))),
+              ],
+              selected: {_cashSale},
+              onSelectionChanged: (v) => setState(() => _cashSale = v.first),
+            ),
             instSectionTitle(p, Loc.t('1. CUSTOMER', '1۔ کسٹمر')),
             _customerCard(p),
-            if (_customer != null) ...[
+            if (_customer != null && !_cashSale) ...[
               instSectionTitle(p, Loc.t('GUARANTORS', 'ضامن')),
               _guarantorCard(p),
             ],
             instSectionTitle(p, Loc.t('2. ITEM', '2۔ سامان')),
             _itemCard(p),
+            if (_cashSale) ...[
+              instSectionTitle(p, Loc.t('3. PRICE', '3۔ قیمت')),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: instCard(p),
+                child: Column(children: [
+                  TextField(
+                      controller: _cash,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: money,
+                      onChanged: re,
+                      decoration: instDeco(p, Loc.t('Cash sale price', 'نقد فروخت قیمت'))),
+                  const SizedBox(height: 10),
+                  SegmentedButton<String>(
+                    segments: [
+                      ButtonSegment(value: 'cash', label: Text(Loc.t('Cash', 'کیش'))),
+                      ButtonSegment(value: 'bank', label: Text(Loc.t('Bank', 'بینک'))),
+                    ],
+                    selected: {_advanceMethod},
+                    onSelectionChanged: (s) => setState(() => _advanceMethod = s.first),
+                  ),
+                  if (Session.isAdminOrManager && (_item?.costPrice ?? 0) > 0 && instParse(_cash.text) > 0) ...[
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: Text(Loc.t('Profit (sale − purchase)', 'منافع (فروخت − خرید)'), style: TextStyle(color: p.textMuted))),
+                      Text(instRs(instParse(_cash.text) - _item!.costPrice),
+                          style: TextStyle(color: instParse(_cash.text) >= _item!.costPrice ? p.teal : p.red, fontWeight: FontWeight.bold)),
+                    ]),
+                  ],
+                ]),
+              ),
+              const SizedBox(height: 20),
+              instPrimaryButton(
+                p,
+                _saving ? Loc.t('Saving...', 'محفوظ ہو رہا ہے...') : Loc.t('Save cash sale', 'نقد سیل محفوظ کریں'),
+                _saving ? null : _saveCash,
+                icon: Icons.point_of_sale,
+              ),
+            ] else ...[
             instSectionTitle(p, Loc.t('3. PLAN', '3۔ پلان')),
             Container(
               padding: const EdgeInsets.all(14),
@@ -687,6 +771,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
               _saving ? null : _save,
               icon: Icons.add_card,
             ),
+            ],
           ]),
         ),
       ]),
@@ -1030,7 +1115,8 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
     if (res == null || !mounted) return;
     try {
       final payId = await InstPlanRepository.instance
-          .receive(v.plan.id, amount: res.amount, fine: res.fine, method: res.method, note: res.note, discount: res.discount);
+          .receive(v.plan.id,
+              amount: res.amount, fine: res.fine, method: res.method, note: res.note, discount: res.discount, paidAt: res.paidAt);
       await _reload();
       if (!mounted) return;
       final fresh = _v;
@@ -1196,7 +1282,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
                         instSectionTitle(p, Loc.t('SCHEDULE', 'قسطوں کا شیڈول')),
                         Container(
                           decoration: instCard(p),
-                          child: Column(children: [for (final l in v.status.lines) _line(p, l)]),
+                          child: Column(children: [for (final l in v.status.lines) _line(p, l, v)]),
                         ),
                         instSectionTitle(p, Loc.t('PAYMENTS', 'وصولیاں')),
                         if (v.payments.isEmpty)
@@ -1368,7 +1454,43 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
     ]);
   }
 
-  Widget _line(AppPalette p, ScheduleLine l) {
+  /// Qist ki tareekh badlo (Admin / Manager, chalta plan, poori ada qist nahi).
+  Future<void> _changeDue(PlanView v, ScheduleLine l) async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+        context: context,
+        helpText: Loc.t('New date for installment ${l.seq}', 'قسط ${l.seq} کی نئی تاریخ'),
+        initialDate: DateTime.fromMillisecondsSinceEpoch(l.dueDate),
+        firstDate: DateTime(now.year - 2),
+        lastDate: DateTime(now.year + 5));
+    if (d == null || !mounted) return;
+    final isLast = l.seq >= v.status.lines.length;
+    bool? shift = false;
+    if (!isLast) {
+      shift = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(Loc.t('Installment ${l.seq}: ${_d(d.millisecondsSinceEpoch)}', 'قسط ${l.seq}: ${_d(d.millisecondsSinceEpoch)}')),
+          content: Text(Loc.t('Move the later installments by the same number of days too?',
+              'کیا اس کے بعد والی قسطیں بھی اتنے ہی دن آگے / پیچھے کریں؟')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Only this one', 'صرف یہ'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(Loc.t('This + later ones', 'یہ + بعد والی'))),
+          ],
+        ),
+      );
+      if (shift == null) return;
+    }
+    try {
+      await InstPlanRepository.instance.setDueDate(v.plan.id, l.seq, d.millisecondsSinceEpoch, shiftRest: shift == true);
+      await _reload();
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
+  }
+
+  Widget _line(AppPalette p, ScheduleLine l, PlanView v) {
+    final canEdit = v.plan.isActive && Session.isAdminOrManager && l.state != InstallmentState.paid;
     final (Color c, String label) = switch (l.state) {
       InstallmentState.paid => (p.teal, Loc.t('Paid', 'ادا')),
       InstallmentState.partial => (p.amber, Loc.t('Part paid', 'کچھ ادا')),
@@ -1376,7 +1498,9 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
       InstallmentState.overdue => (p.red, Loc.t('Late', 'لیٹ')),
       InstallmentState.upcoming => (p.textMuted, Loc.t('Upcoming', 'آنے والی')),
     };
-    return Container(
+    return InkWell(
+      onTap: canEdit ? () => _changeDue(v, l) : null,
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: p.border.withOpacity(0.6)))),
       child: Row(children: [
@@ -1395,6 +1519,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
           child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.bold)),
         ),
       ]),
+      ),
     );
   }
 
@@ -1442,7 +1567,8 @@ class _ReceiveResult {
   final String method;
   final String note;
   final double discount;
-  const _ReceiveResult(this.amount, this.fine, this.method, this.note, [this.discount = 0]);
+  final int paidAt; // Step 30: wasooli ki tareekh (pichhli tareekh bhi)
+  const _ReceiveResult(this.amount, this.fine, this.method, this.note, this.paidAt, [this.discount = 0]);
 }
 
 class _ReceiveDialog extends StatefulWidget {
@@ -1466,6 +1592,20 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
   String _method = 'cash';
   String? _error;
   bool _settle = false;
+  int _paidAt = DateTime.now().millisecondsSinceEpoch;
+
+  /// Wasooli ki tareekh: aaj (abhi ka waqt) ya pichhli koi tareekh (us din 12 baje). Aage ki tareekh nahi.
+  Future<void> _pickPaid() async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+        context: context,
+        initialDate: DateTime.fromMillisecondsSinceEpoch(_paidAt),
+        firstDate: DateTime(now.year - 2),
+        lastDate: now);
+    if (d == null) return;
+    final today = d.year == now.year && d.month == now.month && d.day == now.day;
+    setState(() => _paidAt = today ? now.millisecondsSinceEpoch : DateTime(d.year, d.month, d.day, 12).millisecondsSinceEpoch);
+  }
 
   @override
   void dispose() {
@@ -1490,7 +1630,7 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
       return setState(() => _error = Loc.t('Amount + discount more than remaining (${instRs(widget.max)})',
           'رقم + رعایت باقی (${instRs(widget.max)}) سے زیادہ'));
     }
-    Navigator.pop(context, _ReceiveResult(a, f, _method, _note.text, d));
+    Navigator.pop(context, _ReceiveResult(a, f, _method, _note.text, _paidAt, d));
   }
 
   @override
@@ -1571,6 +1711,15 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
             ],
             selected: {_method},
             onSelectionChanged: (s) => setState(() => _method = s.first),
+          ),
+          const SizedBox(height: 10),
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: _pickPaid,
+            child: InputDecorator(
+              decoration: instDeco(p, Loc.t('Received on', 'وصولی کی تاریخ'), suffix: const Icon(Icons.event)),
+              child: Text(_d(_paidAt), style: TextStyle(color: p.textDark, fontSize: 15)),
+            ),
           ),
           const SizedBox(height: 10),
           TextField(controller: _note, decoration: instDeco(p, Loc.t('Note', 'نوٹ'))),

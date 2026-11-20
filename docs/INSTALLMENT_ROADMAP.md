@@ -222,5 +222,15 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
 ## Step 26 — done: dashboard chart (Admin / Manager)
 - Pichhle 6 mahine: sale (plan + naqd), wasooli, munafa — bar chart, mahine par tap = us ki raqam.
 
+## Step 30 — done (DB v47): dukaan ki farmaishein
+- Dashboard: search bar (naam / CNIC / phone / khata no.) -> customer. 8 tiles + "More" (baqi sab neeche sheet mein).
+- Customer: "Register khata no." (CNIC ke baad, `customer_profiles.khataNo`, sync, search). Customer screen par history
+  card: jari / mukammal / wapas / late plans, kul khareeda / diya / baqi — ek bande ke sab plans ek jagah.
+- Naya qist form: sirf "qist par sale price" (munafa = sale − khareed); upar Qist / Naqd toggle (Naqd = cash sale).
+- Qist: rozana (daily, 400 tak). Qist lete waqt "wasooli ki tareekh". Schedule ki qist par tap (Admin / Manager) =
+  tareekh badlo, chahein to baad wali bhi utne din khiskao.
+- Receipt (PDF + text + naqd sale) hamesha English.
+- Purchase: "Yahi model dobara (sirf naya IMEI)" + "Yahi model: kai dabbe scan" (model / rate aakhri piece wala).
+
 ## Abhi baqi
 - Feature graphic (Play Store)
