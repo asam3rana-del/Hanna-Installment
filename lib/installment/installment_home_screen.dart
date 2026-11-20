@@ -31,6 +31,7 @@ import 'inst_shop_tools_screen.dart';
 import '../license/license_screen.dart';
 import '../services/bill_reminder_service.dart';
 import '../services/staff_auth.dart';
+import '../db/user_repository.dart';
 import '../sync/branch_config_store.dart';
 import '../sync/settings_sync.dart';
 import 'inst_ui.dart';
@@ -51,6 +52,9 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
   InstHomeStats _stats = const InstHomeStats();
   InstCollectionStats _col = const InstCollectionStats();
   bool _syncing = false;
+  // Settings > Shop Information: dukaan ka naam / phone dashboard ke upar (khali = app ka naam).
+  String _shopName = '';
+  String _shopPhone = '';
 
   /// Dashboard ka Sync button: abhi cloud se lena / dena (Settings > Sync Now jaisa).
   Future<void> _syncNow() async {
@@ -164,10 +168,14 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     try {
       final s = await InstRepository.instance.homeStats();
       final c = await InstPlanRepository.instance.collectionStats();
+      final name = (await UserRepository.instance.getSetting('shop_name'))?.trim() ?? '';
+      final phone = (await UserRepository.instance.getSetting('shop_phone'))?.trim() ?? '';
       if (mounted) {
         setState(() {
           _stats = s;
           _col = c;
+          _shopName = name;
+          _shopPhone = phone;
         });
       }
     } catch (_) {}
@@ -286,8 +294,11 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
         instHeader(
           context,
           p,
-          AppInfo.appName,
-          '${Loc.t('Hello', 'السلام علیکم')}, ${Session.displayName.isNotEmpty ? Session.displayName : (Session.username ?? '')}',
+          _shopName.isNotEmpty ? _shopName : AppInfo.appName,
+          [
+            '${Loc.t('Hello', 'السلام علیکم')}, ${Session.displayName.isNotEmpty ? Session.displayName : (Session.username ?? '')}',
+            if (_shopPhone.isNotEmpty) _shopPhone,
+          ].join('  •  '),
           back: false,
           // Settings ka button upar bayen (Admin / Manager) — grid ka tile hata diya.
           leading: Session.isAdminOrManager

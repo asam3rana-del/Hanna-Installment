@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -12,6 +14,7 @@ import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
 import 'inst_rate_screen.dart';
 import 'inst_repository.dart';
+import 'inst_scan.dart';
 import 'inst_ui.dart';
 
 String instStatusLabel(String s) => switch (s) {
@@ -314,6 +317,16 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
     return names;
   }
 
+  /// Dabbe ka barcode scan kar ke pehchan number bharo (Step 27). IMEI field: sirf 15 hindse wala barcode lete hain
+  /// (dabbe ke EAN / model barcode chhor kar scan chalta rehta hai); doosre fields: jo bhi barcode aaye.
+  Future<void> _scanInto(String field) async {
+    final imei = field.toLowerCase().contains('imei');
+    final code = await Navigator.of(context).push<String>(MaterialPageRoute(
+        builder: (_) => InstBarcodeScanPage(accept: (v) => imei ? RegExp(r'^\d{15}$').hasMatch(v.trim()) : v.trim().length >= 4)));
+    if (code == null || !mounted) return;
+    setState(() => _idCtrl(field).text = code.trim());
+  }
+
   TextEditingController _idCtrl(String name) => _ids.putIfAbsent(name, () => TextEditingController());
 
   Future<void> _save() async {
@@ -478,7 +491,14 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
                 controller: _idCtrl(n),
                 textCapitalization: TextCapitalization.characters,
                 keyboardType: n.toLowerCase().contains('imei') ? TextInputType.number : TextInputType.text,
-                decoration: instDeco(p, n),
+                decoration: instDeco(p, n,
+                    suffix: Platform.isAndroid || Platform.isIOS
+                        ? IconButton(
+                            tooltip: Loc.t('Scan barcode', 'بارکوڈ اسکین'),
+                            icon: const Icon(Icons.qr_code_scanner),
+                            onPressed: () => _scanInto(n),
+                          )
+                        : null),
               ),
               gap(),
             ],
