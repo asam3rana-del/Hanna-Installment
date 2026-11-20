@@ -283,11 +283,7 @@ class NewInstallmentScreen extends StatefulWidget {
 }
 
 class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
-  static const _prefProfit = 'inst_default_profit_pct';
-  static const _prefCount = 'inst_default_count';
   static const _prefRound = 'inst_default_round';
-  static const _prefLateFee = 'inst_default_late_fee';
-  static const _prefGrace = 'inst_default_grace';
 
   InstCustomerRow? _customer;
   List<Guarantor> _guarantors = const [];
@@ -296,12 +292,12 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
 
   final _cash = TextEditingController();
   final _advance = TextEditingController();
-  final _profit = TextEditingController(text: '30');
+  final _profit = TextEditingController(); // kul qist qeemat
   final _count = TextEditingController(text: '12');
   final _lateFee = TextEditingController();
-  final _grace = TextEditingController(text: '3');
+  final _grace = TextEditingController(); // form se hata diya: koi jurmana / riayat nahi
   final _note = TextEditingController();
-  String _profitMode = profitPercent;
+  String _profitMode = _modeTotal; // form sirf 'kul qeemat' leta hai
   String _freq = freqMonthly;
   int _roundTo = 10;
   String _advanceMethod = 'cash';
@@ -325,15 +321,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
   Future<void> _init() async {
     try {
       final sp = await SharedPreferences.getInstance();
-      final pr = sp.getDouble(_prefProfit);
-      if (pr != null) _profit.text = instPlain(pr);
-      final ct = sp.getInt(_prefCount);
-      if (ct != null) _count.text = '$ct';
       _roundTo = sp.getInt(_prefRound) ?? _roundTo;
-      final lf = sp.getDouble(_prefLateFee);
-      if (lf != null && lf > 0) _lateFee.text = instPlain(lf);
-      final gr = sp.getInt(_prefGrace);
-      if (gr != null) _grace.text = '$gr';
     } catch (_) {}
     await PartyPhotoStore.instance.ensureLoaded();
     await KycPhotoStore.instance.ensureLoaded();
@@ -389,13 +377,25 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
     });
   }
 
+  /// "Kul" mode (UI only): dukaandar seedha kul qist qeemat likhta hai (advance samet) — munafa = kul − naqd,
+  /// plan mein fixed (Rs) munafa ki tarah save. Baqi modes jaise hain.
+  static const _modeTotal = 'total';
+  String get _effMode => _profitMode == _modeTotal ? profitFixed : _profitMode;
+  double get _effProfit {
+    if (_profitMode != _modeTotal) return instParse(_profit.text);
+    final total = instParse(_profit.text);
+    final cash = instParse(_cash.text);
+    return total <= 0 ? 0 : total - cash;
+  }
+
   PlanQuote? _quote() {
+    if (_profitMode == _modeTotal && instParse(_profit.text) <= 0) return null;
     try {
       return quotePlan(
         cashPrice: instParse(_cash.text),
         advance: instParse(_advance.text),
-        profitMode: _profitMode,
-        profitValue: instParse(_profit.text),
+        profitMode: _effMode,
+        profitValue: _effProfit,
         count: int.tryParse(_count.text.trim()) ?? 0,
         roundTo: _roundTo,
       );
@@ -405,12 +405,15 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
   }
 
   String? _quoteError() {
+    if (_profitMode == _modeTotal && instParse(_cash.text) > 0 && instParse(_profit.text) <= 0) {
+      return Loc.t('Write the total installment price.', 'کل قسط قیمت لکھیں۔');
+    }
     try {
       quotePlan(
         cashPrice: instParse(_cash.text),
         advance: instParse(_advance.text),
-        profitMode: _profitMode,
-        profitValue: instParse(_profit.text),
+        profitMode: _effMode,
+        profitValue: _effProfit,
         count: int.tryParse(_count.text.trim()) ?? 0,
         roundTo: _roundTo,
       );
@@ -564,8 +567,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
         cashPrice: q.cashPrice,
         advance: q.advance,
         advanceMethod: _advanceMethod,
-        profitMode: _profitMode,
-        profitValue: instParse(_profit.text),
+        profitMode: _effMode,
+        profitValue: _effProfit,
         count: q.count,
         frequency: _freq,
         firstDueDate: _firstDue,
@@ -576,11 +579,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
       );
       try {
         final sp = await SharedPreferences.getInstance();
-        if (_profitMode == profitPercent) await sp.setDouble(_prefProfit, instParse(_profit.text));
-        await sp.setInt(_prefCount, q.count);
         await sp.setInt(_prefRound, _roundTo);
-        await sp.setDouble(_prefLateFee, instParse(_lateFee.text));
-        await sp.setInt(_prefGrace, int.tryParse(_grace.text.trim()) ?? 0);
       } catch (_) {}
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => InstPlanDetailScreen(planId: id)));
@@ -646,31 +645,21 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
                   ),
                 ],
                 gap(),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _profit,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: money,
-                      onChanged: re,
-                      decoration: instDeco(p, _profitMode == profitPercent ? Loc.t('Profit %', 'منافع %') : Loc.t('Profit (Rs)', 'منافع (روپے)')),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: profitPercent, label: Text('%')),
-                      ButtonSegment(value: profitFixed, label: Text('Rs')),
-                    ],
-                    selected: {_profitMode},
-                    onSelectionChanged: (s) => setState(() => _profitMode = s.first),
-                  ),
-                ]),
+                // Sirf kul qist qeemat (advance samet) — munafa app khud nikalti hai (Step 28: %, Rs options hata diye).
+                TextField(
+                  controller: _profit,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: money,
+                  onChanged: re,
+                  decoration: instDeco(p, Loc.t('Total installment price', 'کل قسط قیمت')),
+                ),
                 Padding(
                   padding: const EdgeInsets.only(top: 4, left: 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(Loc.t('Profit is on the amount left after advance.', 'منافع ایڈوانس کے بعد باقی رقم پر۔'),
+                    child: Text(
+                        Loc.t('Total the customer pays, advance included. Profit = total − cash price.',
+                            'کسٹمر کل کتنا دے گا (ایڈوانس سمیت)۔ منافع = کل − نقد قیمت۔'),
                         style: TextStyle(color: p.textMuted, fontSize: 11)),
                   ),
                 ),
@@ -698,14 +687,6 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
                     ),
                   ),
                 ]),
-                const SizedBox(height: 8),
-                Wrap(spacing: 6, children: [
-                  for (final n in const [3, 6, 9, 12, 18, 24])
-                    ActionChip(
-                      label: Text('$n'),
-                      onPressed: () => setState(() => _count.text = '$n'),
-                    ),
-                ]),
                 gap(),
                 InkWell(
                   borderRadius: BorderRadius.circular(14),
@@ -727,28 +708,6 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
                     if (v != null) setState(() => _roundTo = v);
                   },
                 ),
-                gap(),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _lateFee,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: money,
-                      decoration: instDeco(p, Loc.t('Late fine per qist', 'فی قسط لیٹ جرمانہ')),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _grace,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: instDeco(p, Loc.t('Grace days', 'رعایتی دن')),
-                    ),
-                  ),
-                ]),
-                gap(),
-                TextField(controller: _note, maxLines: 2, decoration: instDeco(p, Loc.t('Note', 'نوٹ'))),
               ]),
             ),
             instSectionTitle(p, Loc.t('SUMMARY', 'خلاصہ')),
