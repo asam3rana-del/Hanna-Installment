@@ -75,7 +75,7 @@ class DueAlertService {
     // Hanna Installment: roz ki qist notification -> Wasooli List.
     if (payload == InstDueAlert.payload) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        AppLock.navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const InstCollectionListScreen()));
+        AppLock.navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const InstCollectionListScreen(initial: CollectWindow.today)));
       });
       return;
     }

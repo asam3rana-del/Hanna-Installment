@@ -22,6 +22,7 @@ import 'inst_csv.dart';
 import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
 import 'inst_repository.dart';
+import 'inst_signature.dart' show planSignCustomer, planSignGuarantor;
 import 'inst_terms.dart';
 import 'shop_logo.dart';
 import 'kyc_photo_store.dart';
@@ -175,6 +176,9 @@ class InstPdf {
     final kyc = KycPhotoStore.instance;
     final face = await _img(PartyPhotoStore.instance.pathFor(true, v.plan.customerId));
     final cF = await _img(kyc.pathFor('c', v.plan.customerId, KycPhotoStore.cnicFront));
+    // Step 32: plan banate waqt liye gaye dastakhat.
+    final sigC = await _img(kyc.pathFor('p', v.plan.id, planSignCustomer));
+    final sigG = await _img(kyc.pathFor('p', v.plan.id, planSignGuarantor));
     final cB = await _img(kyc.pathFor('c', v.plan.customerId, KycPhotoStore.cnicBack));
     final gPhotos = <int, (pw.MemoryImage?, pw.MemoryImage?)>{};
     for (final g in gs) {
@@ -315,16 +319,23 @@ class InstPdf {
           pw.SizedBox(height: 4),
           _t(Loc.t('We have read and accept the above terms.', 'ہم نے اوپر دی گئی شرائط پڑھ کر قبول کیں۔'), size: 9, argb: 0xFF8A90A6),
         ],
-        pw.SizedBox(height: 26),
-        pw.Row(children: [
-          for (final s in [Loc.t('Customer signature', 'خریدار کے دستخط'), Loc.t('Guarantor signature', 'ضامن کے دستخط'), Loc.t('Shop', 'دکان')])
+        pw.SizedBox(height: sigC != null || sigG != null ? 8 : 26),
+        pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+          for (final (s, img) in [
+            (Loc.t('Customer signature', 'خریدار کے دستخط'), sigC),
+            (Loc.t('Guarantor signature', 'ضامن کے دستخط'), sigG),
+            (Loc.t('Shop', 'دکان'), null),
+          ])
             pw.Expanded(
-              child: pw.Container(
-                margin: const pw.EdgeInsets.symmetric(horizontal: 8),
-                padding: const pw.EdgeInsets.only(top: 3),
-                decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: _navy, width: 0.6))),
-                child: pw.Center(child: _t(s, size: 8.5, argb: 0xFF8A90A6)),
-              ),
+              child: pw.Column(children: [
+                if (img != null) pw.Container(height: 46, child: pw.Image(img, fit: pw.BoxFit.contain)),
+                pw.Container(
+                  margin: const pw.EdgeInsets.symmetric(horizontal: 8),
+                  padding: const pw.EdgeInsets.only(top: 3),
+                  decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: _navy, width: 0.6))),
+                  child: pw.Center(child: _t(s, size: 8.5, argb: 0xFF8A90A6)),
+                ),
+              ]),
             ),
         ]),
       ];

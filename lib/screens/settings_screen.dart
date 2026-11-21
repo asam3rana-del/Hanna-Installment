@@ -38,6 +38,7 @@ import 'workers_screen.dart';
 import '../services/permissions.dart';
 import '../widgets/permission_guard.dart';
 import '../installment/shop_logo.dart';
+import '../installment/inst_report_screens.dart';
 import 'dart:io' as io;
 
 /// Receipt footer / address / currency / tax fields Kotlin mein user ke kehne par hata di gayi thin — yahan bhi nahi
@@ -476,6 +477,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(backgroundColor: ThemeManager.palette.navy, foregroundColor: Colors.white, title: Text(Loc.t('Settings', 'سیٹنگز'))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         PremiumHeader(title: _headerShop, subtitle: Loc.t('INSTALLMENT SHOP', 'قسط کی دکان')),
+        // Step 32: Reports dashboard se yahan (Admin / Manager).
+        if (Session.isAdminOrManager)
+          Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              leading: Icon(Icons.insights_outlined, color: ThemeManager.palette.navyInk),
+              title: Text(Loc.t('Reports', 'رپورٹس'), style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(Loc.t('Profit, sale, purchase, returns, stock, dues', 'منافع، سیل، خریداری، واپسی، اسٹاک، قسطیں')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InstReportsHubScreen())),
+            ),
+          ),
         ..._linkRows(),
         const SizedBox(height: 6),
         if (admin)

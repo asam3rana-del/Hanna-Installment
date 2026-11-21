@@ -46,7 +46,7 @@ class InstPhotoSync {
   }
 
   static Future<String?> _ownerSid(DatabaseExecutor ex, String owner, int id) async {
-    final table = owner == 'g' ? 'inst_guarantors' : 'customers';
+    final table = owner == 'g' ? 'inst_guarantors' : (owner == 'p' ? 'inst_plans' : 'customers');
     final r = await ex.query(table, columns: ['serverId'], where: 'id = ?', whereArgs: [id], limit: 1);
     final sid = r.isEmpty ? null : r.first['serverId'];
     return sid is String && sid.trim().isNotEmpty ? sid : null;
@@ -118,10 +118,10 @@ Future<void> applyInstallmentPhotos(DatabaseExecutor db, List<SyncDoc> docs) asy
       final ownerSid = d['ownerServerId'];
       final kind = d['kind'];
       if (sid is! String || owner is! String || ownerSid is! String || kind is! String) continue;
-      if (owner != 'c' && owner != 'g') continue;
+      if (owner != 'c' && owner != 'g' && owner != 'p') continue; // p = plan ke dastakhat
       if (!RegExp(r'^[A-Za-z]{1,12}$').hasMatch(kind)) continue;
       if (await q.pendingCountForEntity(instPhotoType, sid) > 0) continue; // is device ki nayi tasveer abhi jani hai
-      final table = owner == 'g' ? 'inst_guarantors' : 'customers';
+      final table = owner == 'g' ? 'inst_guarantors' : (owner == 'p' ? 'inst_plans' : 'customers');
       final r = await db.query(table, columns: ['id'], where: 'serverId = ?', whereArgs: [ownerSid], limit: 1);
       if (r.isEmpty) continue;
       final id = (r.first['id'] as num).toInt();

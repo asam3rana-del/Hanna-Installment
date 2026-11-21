@@ -29,12 +29,12 @@ Future<void> _call(String phone) async {
 
 // ===================================================================== wasooli list
 
-enum CollectWindow { late, today, week, month }
+enum CollectWindow { all, late, today, week, month }
 
 /// Recovery wale ke liye: kis se kitna lena hai (late / aaj / 7 din / 30 din), call + WhatsApp + list share.
 class InstCollectionListScreen extends StatefulWidget {
   final CollectWindow initial;
-  const InstCollectionListScreen({super.key, this.initial = CollectWindow.today});
+  const InstCollectionListScreen({super.key, this.initial = CollectWindow.all});
 
   @override
   State<InstCollectionListScreen> createState() => _InstCollectionListScreenState();
@@ -63,6 +63,7 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
 
   /// Is window mein lene wali raqam (late hamesha shamil, kyun ke wo bhi abhi leni hai).
   double _amount(PlanView v) => switch (_w) {
+        CollectWindow.all => v.status.remaining, // Step 32: har woh customer jis se kuch bhi lena hai
         CollectWindow.late => v.status.overdue,
         CollectWindow.today => v.status.dueNow,
         CollectWindow.week => dueWithin(v.status, _today, 7),
@@ -70,6 +71,7 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
       };
 
   String _label(CollectWindow w) => switch (w) {
+        CollectWindow.all => Loc.t('Everyone who owes', 'سب جن سے لینا ہے'),
         CollectWindow.late => Loc.t('Late only', 'صرف لیٹ'),
         CollectWindow.today => Loc.t('Today (with late)', 'آج (لیٹ سمیت)'),
         CollectWindow.week => Loc.t('Next 7 days', 'اگلے 7 دن'),

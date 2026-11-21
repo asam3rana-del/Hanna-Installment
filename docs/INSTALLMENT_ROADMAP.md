@@ -241,5 +241,13 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
 - Reports: Purchase History, Returns History (PDF / Excel).
 - Dukaan ka logo (Settings > Shop Information) PDF par; dukaan ka naam ho to receipt / PDF par app ka naam / logo nahi.
 
+## Step 32 — done (DB change nahi)
+- Dashboard: sab se upar Lena / Dena (raqam chhupi, aankh dabakar), phir search, phir aaj / late / wasooli. Customers /
+  stock / stock cost aur "zamin nahi" wali patti hata di. "Wasooli" tile (sab jin se lena hai); Reports -> Settings.
+- Wasooli list: naya pehla option "Sab jin se lena hai" (kul baqi), default.
+- Kharche: category nahi (sab Miscellaneous + tafseel).
+- Naya qist: tasdeeq ki jagah iqrar nama screen — khulasa + sharait + customer / zamin ke dastakhat (ungli / stylus,
+  bina package). Dastakhat KycPhotoStore owner 'p' (plan) mein, sync, plan PDF mein dastakhat ki lakeer ke upar.
+
 ## Abhi baqi
 - Feature graphic (Play Store)

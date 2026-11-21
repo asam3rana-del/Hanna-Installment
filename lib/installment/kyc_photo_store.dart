@@ -19,6 +19,7 @@ class KycPhotoStore {
   static const photo = 'photo';
   static const document = 'doc';
 
+
   final ValueNotifier<int> changes = ValueNotifier<int>(0);
 
   /// Is device par tasveer li / hatai gayi (path null = hatai) — InstPhotoSync upload karta hai.
@@ -35,7 +36,7 @@ class KycPhotoStore {
   final Map<String, String> _index = {};
   Future<void>? _loading;
 
-  static final _nameRe = RegExp(r'^([cg])_(\d+)_([A-Za-z]+)_(\d+)\.jpg$');
+  static final _nameRe = RegExp(r'^([cgp])_(\d+)_([A-Za-z]+)_(\d+)\.jpg$'); // p = plan (dastakhat, Step 32)
 
   Future<Directory> _dir() async {
     final base = await getApplicationDocumentsDirectory();

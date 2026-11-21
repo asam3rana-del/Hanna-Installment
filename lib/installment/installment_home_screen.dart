@@ -58,6 +58,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
   String _shopName = '';
   String _shopPhone = '';
   double _payable = 0; // Step 31: suppliers ka kul baqi (hum ne dena hai)
+  bool _showMoney = false; // Step 32: Lena / Dena raqam chhupi; aankh dabane par
 
   /// Dashboard ka Sync button: abhi cloud se lena / dena (Settings > Sync Now jaisa).
   Future<void> _syncNow() async {
@@ -416,8 +417,6 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
         () => _push(const InstPurchasesScreen()));
     final tStock = _Tile(Icons.inventory_2_outlined, Loc.t('Stock', 'اسٹاک'), Loc.t('Mobiles, bikes, LCDs...', 'موبائل، بائیک، ایل سی ڈی'), p.blue,
         () => _push(const InstItemsScreen()));
-    final tReports = _Tile(Icons.insights_outlined, Loc.t('Reports', 'رپورٹس'), Loc.t('Profit, sale, stock, dues', 'منافع، سیل، اسٹاک، قسطیں'), p.navyLight,
-        () => _push(const InstReportsHubScreen()));
     final tPlans = _Tile(Icons.request_quote_outlined, Loc.t('Installments', 'قسطیں'), Loc.t('${_col.activePlans} active plans', '${_col.activePlans} جاری پلان'), p.navy,
         () => _push(const InstPlansScreen()));
     final tScan = _Tile(Icons.qr_code_scanner, Loc.t('Scan & Sell', 'اسکین سے سیل'), Loc.t('Scan IMEI -> qist / cash', 'IMEI اسکین -> قسط / نقد'), p.purple,
@@ -428,10 +427,10 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
         () => _push(const InstHeldSecuritiesScreen()));
     final tReturns = _Tile(Icons.assignment_return_outlined, Loc.t('Returns', 'واپسی'), Loc.t('Sale / purchase return', 'سیل / خریداری واپسی'), p.orange,
         _returns);
+    final tCollection = _Tile(Icons.format_list_numbered, Loc.t('Collection', 'وصولی'), Loc.t('Everyone who owes', 'جن سے لینا ہے'), p.blue,
+        () => _push(const InstCollectionListScreen()));
     final more = <_Tile>[
-      if (mgr) tPlans,
-      _Tile(Icons.format_list_numbered, Loc.t('Collection List', 'وصولی لسٹ'), Loc.t('Who to collect from', 'کس سے کتنا لینا ہے'), p.blue,
-          () => _push(const InstCollectionListScreen())),
+      tPlans,
       _Tile(Icons.report_gmailerrorred_outlined, Loc.t('Defaulters', 'ڈیفالٹرز'), Loc.t('Late + guarantor phones', 'لیٹ + ضامن کے فون'), p.red,
           () => _push(const InstDefaultersScreen())),
       if (mgr) tStock,
@@ -447,7 +446,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
       tPayRec,
       tCustomers,
       mgr ? tPurchases : tStock,
-      mgr ? tReports : tPlans,
+      tCollection,
       if (kShowScan) tScan,
       tReturns,
       tRemind,
@@ -500,12 +499,47 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
           child: RefreshIndicator(
             onRefresh: _load,
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
+              // Step 32: sab se upar Lena / Dena (chhupa — aankh dabakar dekhein), phir search, phir aaj ki qisten.
+              if (Session.isAdminOrManager) ...[
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+                  decoration: instCard(p),
+                  child: Row(children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _push(const InstReceivableScreen()),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(Loc.t('Receivable (to get)', 'لینا ہے'), style: TextStyle(color: p.textMuted, fontSize: 12)),
+                          Text(_showMoney ? instRs(_col.receivable) : 'Rs ••••••',
+                              style: TextStyle(color: p.teal, fontWeight: FontWeight.bold, fontSize: 18)),
+                        ]),
+                      ),
+                    ),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _push(const InstSuppliersScreen()),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(Loc.t('Payable (to give)', 'دینا ہے'), style: TextStyle(color: p.textMuted, fontSize: 12)),
+                          Text(_showMoney ? instRs(_payable) : 'Rs ••••••',
+                              style: TextStyle(color: p.red, fontWeight: FontWeight.bold, fontSize: 18)),
+                        ]),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: _showMoney ? Loc.t('Hide', 'چھپائیں') : Loc.t('Show', 'دکھائیں'),
+                      icon: Icon(_showMoney ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: p.textMuted),
+                      onPressed: () => setState(() => _showMoney = !_showMoney),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+              ],
               const InstHomeSearch(),
               Row(children: [
                 Expanded(
                   child: _tapStat(p, Loc.t('Due today', 'آج کی قسطیں'), instRs(_col.dueToday),
                       Loc.t('${_col.dueTodayCount} customers', '${_col.dueTodayCount} کسٹمر'), p.amber,
-                      () => _push(const InstCollectionListScreen())),
+                      () => _push(const InstCollectionListScreen(initial: CollectWindow.today))),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -516,59 +550,10 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: _tapStat(p, Loc.t('Collected', 'آج وصولی'), instRs(_col.collectedToday),
-                      Loc.t('Receivable ${instRs(_col.receivable)}', 'کل باقی ${instRs(_col.receivable)}'), p.teal,
+                      Loc.t('Today', 'آج'), p.teal,
                       () => _push(const InstPlansScreen())),
                 ),
               ]),
-              if (Session.isAdminOrManager) ...[
-                const SizedBox(height: 10),
-                // Step 31: kul lena (customers se baqi qisten) aur kul dena (suppliers ka baqi).
-                Row(children: [
-                  Expanded(
-                    child: _tapStat(p, Loc.t('Receivable (to get)', 'لینا ہے'), instRs(_col.receivable),
-                        Loc.t('From customers', 'کسٹمرز سے'), p.teal, () => _push(const InstReceivableScreen())),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _tapStat(p, Loc.t('Payable (to give)', 'دینا ہے'), instRs(_payable),
-                        Loc.t('To suppliers', 'سپلائرز کو'), p.red, () => _push(const InstSuppliersScreen())),
-                  ),
-                ]),
-              ],
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: _stat(p, Loc.t('Customers', 'کسٹمرز'), '${_stats.customers}', p.purple)),
-                const SizedBox(width: 10),
-                Expanded(child: _stat(p, Loc.t('In stock', 'اسٹاک میں'), '${_stats.itemsInStock}', p.blue)),
-                if (Session.isAdminOrManager) ...[
-                  const SizedBox(width: 10),
-                  Expanded(child: _stat(p, Loc.t('Stock cost', 'اسٹاک کی لاگت'), instRs(_stats.stockCostValue), p.amber)),
-                ],
-              ]),
-              if (_stats.profilesWithoutGuarantor > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => _push(const InstCustomersScreen(onlyWithoutGuarantor: true)),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: instCard(p),
-                      child: Row(children: [
-                        Icon(Icons.warning_amber_rounded, color: p.red),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            Loc.t('${_stats.profilesWithoutGuarantor} customer(s) have no guarantor',
-                                '${_stats.profilesWithoutGuarantor} کسٹمر کا کوئی ضامن نہیں'),
-                            style: TextStyle(color: p.textDark, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        Icon(Icons.chevron_right, color: p.textMuted),
-                      ]),
-                    ),
-                  ),
-                ),
               const SizedBox(height: 16),
               GridView.count(
                 crossAxisCount: cols,
@@ -608,20 +593,6 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
             Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.textMuted, fontSize: 10.5)),
           ]),
         ),
-      );
-
-  Widget _stat(AppPalette p, String label, String value, Color c) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: instCard(p),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(color: p.textMuted, fontSize: 12)),
-          const SizedBox(height: 6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value, style: TextStyle(color: c, fontSize: 20, fontWeight: FontWeight.bold)),
-          ),
-        ]),
       );
 
   Widget _tile(AppPalette p, _Tile t) => InkWell(

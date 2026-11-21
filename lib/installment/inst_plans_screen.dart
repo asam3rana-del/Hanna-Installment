@@ -22,6 +22,7 @@ import 'inst_cash_sale_repository.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_repository.dart';
 import 'inst_security_screens.dart';
+import 'inst_signature.dart';
 import 'inst_ui.dart';
 import 'kyc_photo_store.dart';
 
@@ -561,24 +562,21 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
       if (go != true || !mounted) return;
     }
 
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(Loc.t('Confirm installment', 'قسط کی تصدیق')),
-        content: Text([
-          '${c.name} — ${it.title.isEmpty ? it.model : it.title}',
-          '${Loc.t('Total price', 'کل قیمت')}: ${instRs(q.totalPrice)}',
-          if (q.advance > 0) '${Loc.t('Advance now', 'ابھی ایڈوانس')}: ${instRs(q.advance)}',
-          '${q.count} × ${instRs(q.each)}${q.last != q.each ? ' (${Loc.t('last', 'آخری')} ${instRs(q.last)})' : ''}',
-          '${Loc.t('First due', 'پہلی قسط')}: ${_d(_firstDue)}',
-        ].join('\n')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Cancel', 'منسوخ'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(Loc.t('Create plan', 'پلان بنائیں'))),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+    // Step 32: tasdeeq ki jagah iqrar nama — khulasa + sharait + customer / zamin ke dastakhat (tab / mobile par).
+    final gNames = [for (final g in _guarantors.where((g) => _gSel.contains(g.id))) g.name];
+    final sign = await Navigator.of(context).push<AgreementSignResult>(MaterialPageRoute(
+        builder: (_) => InstAgreementSignScreen(
+              customerName: c.name,
+              guarantorName: gNames.isEmpty ? null : gNames.first,
+              summary: [
+                '${c.name} — ${it.title.isEmpty ? it.model : it.title}',
+                '${Loc.t('Total price', 'کل قیمت')}: ${instRs(q.totalPrice)}',
+                if (q.advance > 0) '${Loc.t('Advance now', 'ابھی ایڈوانس')}: ${instRs(q.advance)}',
+                '${q.count} × ${instRs(q.each)}${q.last != q.each ? ' (${Loc.t('last', 'آخری')} ${instRs(q.last)})' : ''}',
+                '${Loc.t('First due', 'پہلی قسط')}: ${_d(_firstDue)}',
+              ],
+            )));
+    if (sign == null || !mounted) return;
 
     setState(() => _saving = true);
     try {
@@ -602,6 +600,12 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
       try {
         final sp = await SharedPreferences.getInstance();
         await sp.setInt(_prefRound, _roundTo);
+      } catch (_) {}
+      // Dastakhat plan ke saath (sync bhi hote hain, PDF mein chhapte hain).
+      try {
+        final kyc = KycPhotoStore.instance;
+        if (sign.customerSig != null) await kyc.saveFrom(sign.customerSig!, owner: 'p', id: id, kind: planSignCustomer);
+        if (sign.guarantorSig != null) await kyc.saveFrom(sign.guarantorSig!, owner: 'p', id: id, kind: planSignGuarantor);
       } catch (_) {}
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => InstPlanDetailScreen(planId: id)));
