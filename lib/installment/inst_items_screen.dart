@@ -492,7 +492,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
                 textCapitalization: TextCapitalization.characters,
                 keyboardType: n.toLowerCase().contains('imei') ? TextInputType.number : TextInputType.text,
                 decoration: instDeco(p, n,
-                    suffix: Platform.isAndroid || Platform.isIOS
+                    suffix: kShowScan && (Platform.isAndroid || Platform.isIOS)
                         ? IconButton(
                             tooltip: Loc.t('Scan barcode', 'بارکوڈ اسکین'),
                             icon: const Icon(Icons.qr_code_scanner),
@@ -520,7 +520,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
               onChanged: (_) => setState(() {}),
               decoration: instDeco(p, Loc.t('Cash sale price', 'نقد قیمت فروخت')),
             ),
-            if (Session.isAdminOrManager && cost > 0 && cash > 0)
+            if (kShowProfitOutsideReports && Session.isAdminOrManager && cost > 0 && cash > 0)
               Padding(
                 padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
                 child: Text(

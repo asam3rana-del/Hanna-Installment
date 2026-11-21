@@ -37,6 +37,8 @@ import 'utility_bills_screen.dart';
 import 'workers_screen.dart';
 import '../services/permissions.dart';
 import '../widgets/permission_guard.dart';
+import '../installment/shop_logo.dart';
+import 'dart:io' as io;
 
 /// Receipt footer / address / currency / tax fields Kotlin mein user ke kehne par hata di gayi thin — yahan bhi nahi
 /// (stored receipt_footer value print par ab bhi parha jata hai, jaisa Kotlin mein).
@@ -73,11 +75,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _allowShort = true;
   bool _compatPrint = false;
   bool _testing = false;
+  String? _logoPath; // Step 31: dukaan ka logo (PDF / receipt)
 
   @override
   void initState() {
     super.initState();
     _load();
+    ShopLogo.path().then((v) {
+      if (mounted) setState(() => _logoPath = v);
+    });
     Permissions.refresh().then((_) {
       if (mounted) setState(() {});
     });
@@ -474,6 +480,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 6),
         if (admin)
           _card(Loc.t('Shop Information', 'دکان کی معلومات'), Icons.store, [
+            // Dukaan ka logo: receipt / plan PDF / reports ke upar (app ka naam / logo nahi).
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade400)),
+                  clipBehavior: Clip.antiAlias,
+                  child: _logoPath == null
+                      ? const Icon(Icons.storefront_outlined, size: 32)
+                      : Image.file(io.File(_logoPath!), fit: BoxFit.cover),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Wrap(spacing: 8, runSpacing: 6, children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final v = await ShopLogo.pick();
+                        if (v != null && mounted) setState(() => _logoPath = v);
+                      },
+                      icon: const Icon(Icons.image_outlined),
+                      label: Text(_logoPath == null ? Loc.t('Add shop logo', 'دکان کا لوگو لگائیں') : Loc.t('Change logo', 'لوگو بدلیں')),
+                    ),
+                    if (_logoPath != null)
+                      TextButton(
+                        onPressed: () async {
+                          await ShopLogo.remove();
+                          if (mounted) setState(() => _logoPath = null);
+                        },
+                        child: Text(Loc.t('Remove', 'ہٹائیں')),
+                      ),
+                  ]),
+                ),
+              ]),
+            ),
             _tf(_shopName, Loc.t('Shop Name', 'دکان کا نام')),
             _tf(_shopOwner, Loc.t('Owner Name', 'مالک کا نام')),
             _tf(_shopPhone, Loc.t('Phone', 'فون')),

@@ -121,3 +121,9 @@ Widget instPrimaryButton(AppPalette p, String label, VoidCallback? onPressed, {I
         label: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ),
     );
+
+/// Step 31: munafa sirf Reports mein — plan / naqd sale / item screens par nahi (dukaandar ki farmaish).
+const kShowProfitOutsideReports = false;
+
+/// Step 31: scan se purchase / sale abhi chhupa hai (code mojood, kahin dikhta nahi). true = wapas.
+const kShowScan = false;

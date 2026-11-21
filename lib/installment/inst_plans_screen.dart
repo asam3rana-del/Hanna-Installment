@@ -668,7 +668,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
                     selected: {_advanceMethod},
                     onSelectionChanged: (s) => setState(() => _advanceMethod = s.first),
                   ),
-                  if (Session.isAdminOrManager && (_item?.costPrice ?? 0) > 0 && instParse(_cash.text) > 0) ...[
+                  if (kShowProfitOutsideReports && Session.isAdminOrManager && (_item?.costPrice ?? 0) > 0 && instParse(_cash.text) > 0) ...[
                     const SizedBox(height: 10),
                     Row(children: [
                       Expanded(child: Text(Loc.t('Profit (sale − purchase)', 'منافع (فروخت − خرید)'), style: TextStyle(color: p.textMuted))),
@@ -931,7 +931,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
         line('${q.count} × ${Loc.t('installment', 'قسط')}', instRs(q.each), c: p.navy, bold: true),
         if (q.last != q.each) line(Loc.t('Last installment', 'آخری قسط'), instRs(q.last)),
         line(Loc.t('First / last date', 'پہلی / آخری تاریخ'), '${_d(dates.first)}  →  ${_d(dates.last)}'),
-        if (Session.isAdminOrManager && cost > 0) ...[
+        if (kShowProfitOutsideReports && Session.isAdminOrManager && cost > 0) ...[
           const Divider(),
           line(Loc.t('Purchase (cost)', 'خرید'), instRs(cost)),
           line(Loc.t('Profit (sale − purchase)', 'منافع (فروخت − خرید)'), instRs(q.totalPrice - cost),
@@ -1444,7 +1444,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
         '${v.finesTaken > 0 ? '  •  ${Loc.t('Fines', 'جرمانہ')} ${instRs(v.finesTaken)}' : ''}',
         style: TextStyle(color: p.textMuted, fontSize: 11.5),
       ),
-      if (Session.isAdminOrManager && v.plan.costPrice > 0)
+      if (kShowProfitOutsideReports && Session.isAdminOrManager && v.plan.costPrice > 0)
         Text(
           // Discount: qist mein ginti hoti hai magar paisa nahi aata — munafe se poora kam.
           '${Loc.t('Profit', 'منافع')}: ${instRs((profitShare(collected: st.paid + v.advancePaid, totalPrice: v.plan.totalPrice, costPrice: v.plan.costPrice) ?? 0) - v.discountGiven)}'

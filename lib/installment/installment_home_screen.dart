@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../app_info.dart';
 import '../screens/cash_screen.dart';
-import '../screens/expense_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/crash_handler.dart';
@@ -19,6 +18,7 @@ import 'inst_customers_screen.dart';
 import 'inst_items_screen.dart';
 import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
+import 'inst_purchase_repository.dart';
 import 'inst_purchase_screens.dart';
 import 'inst_report_screens.dart';
 import 'inst_home_search.dart';
@@ -32,6 +32,7 @@ import 'inst_shop_tools_screen.dart';
 import '../license/license_screen.dart';
 import '../services/bill_reminder_service.dart';
 import '../services/staff_auth.dart';
+import '../db/cash_repository.dart';
 import '../db/user_repository.dart';
 import '../sync/branch_config_store.dart';
 import '../sync/settings_sync.dart';
@@ -56,6 +57,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
   // Settings > Shop Information: dukaan ka naam / phone dashboard ke upar (khali = app ka naam).
   String _shopName = '';
   String _shopPhone = '';
+  double _payable = 0; // Step 31: suppliers ka kul baqi (hum ne dena hai)
 
   /// Dashboard ka Sync button: abhi cloud se lena / dena (Settings > Sync Now jaisa).
   Future<void> _syncNow() async {
@@ -169,6 +171,10 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
     try {
       final s = await InstRepository.instance.homeStats();
       final c = await InstPlanRepository.instance.collectionStats();
+      var payable = 0.0;
+      try {
+        payable = (await InstPurchaseRepository.instance.summary(from: 0, to: DateTime.now().millisecondsSinceEpoch + 1)).payable;
+      } catch (_) {}
       final name = (await UserRepository.instance.getSetting('shop_name'))?.trim() ?? '';
       final phone = (await UserRepository.instance.getSetting('shop_phone'))?.trim() ?? '';
       if (mounted) {
@@ -177,6 +183,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
           _col = c;
           _shopName = name;
           _shopPhone = phone;
+          _payable = payable;
         });
       }
     } catch (_) {}
@@ -209,32 +216,151 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.only(bottom: 12),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // Step 31: sirf 4 kaam — qist lena, doosra paisa aaya, supplier ko dena, kharcha / paisa gaya.
             head(Loc.t('RECEIVE (MONEY IN)', 'لینا (رقم آئی)'), p.teal),
             item(Icons.request_quote_outlined, p.teal, Loc.t('Installment collection', 'قسط کی وصولی'),
                 Loc.t('Pick the customer, then Receive', 'کسٹمر چنیں، پھر وصول کریں'), const InstCollectionListScreen()),
-            item(Icons.point_of_sale, p.tealDark, Loc.t('Cash sale', 'نقد سیل'), Loc.t('Sell a piece for full payment', 'پوری رقم پر پیس بیچیں'),
-                const InstNewCashSaleScreen()),
-            item(Icons.south_west, p.blue, Loc.t('Other money in (Cash In)', 'دوسری آمد (کیش ان)'),
-                Loc.t('Opening cash, owner money...', 'شروع کا کیش، مالک کی رقم...'), const CashScreen()),
+            ListTile(
+              leading: CircleAvatar(backgroundColor: p.blue.withOpacity(0.14), child: Icon(Icons.south_west, color: p.blue)),
+              title: Text(Loc.t('Other money in', 'دوسری رقم آئی'), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+              subtitle: Text(Loc.t('Amount + reason, done', 'رقم + وجہ، بس'), style: TextStyle(color: p.textMuted, fontSize: 12)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _quickCash('IN');
+              },
+            ),
             head(Loc.t('PAY (MONEY OUT)', 'دینا (رقم گئی)'), p.red),
             if (mgr)
               item(Icons.local_shipping_outlined, p.red, Loc.t('Pay supplier', 'سپلائر کو ادائیگی'),
                   Loc.t('Choose supplier, then Pay', 'سپلائر چنیں، پھر ادا کریں'), const InstSuppliersScreen()),
-            item(Icons.receipt_long_outlined, p.orange, Loc.t('Expense', 'خرچہ'), Loc.t('Electricity, tea, repairs...', 'بجلی، چائے، مرمت...'),
-                const ExpenseScreen()),
-            item(Icons.north_east, p.purple, Loc.t('Other money out (Cash Out)', 'دوسرا خرچ (کیش آؤٹ)'),
-                Loc.t('Owner withdrawal, bank deposit...', 'مالک نے نکالے، بینک میں جمع...'), const CashScreen()),
-            head(Loc.t('RETURNS', 'واپسی'), p.orange),
-            item(Icons.assignment_return_outlined, p.orange, Loc.t('Sale return (customer)', 'سیل واپسی (کسٹمر)'),
-                Loc.t('Open the cash sale, then "Sale return"', 'نقد سیل کھولیں، پھر "سیل واپسی"'), const InstCashSalesScreen()),
-            if (mgr)
-              item(Icons.keyboard_return, p.navy, Loc.t('Purchase return (supplier)', 'خریداری واپسی (سپلائر)'),
-                  Loc.t('Open the bill, then "Return"', 'بل کھولیں، پھر "واپس کریں"'), const InstPurchasesScreen()),
-            if (mgr)
-              item(Icons.undo, p.red, Loc.t('Installment item taken back', 'قسط کا سامان واپس'),
-                  Loc.t('Open the plan, ⋮ menu > "Take item back"', 'پلان کھولیں، ⋮ مینو > "سامان واپس لیں"'), const InstPlansScreen()),
+            ListTile(
+              leading: CircleAvatar(backgroundColor: p.orange.withOpacity(0.14), child: Icon(Icons.north_east, color: p.orange)),
+              title: Text(Loc.t('Expense / other money out', 'خرچہ / دوسری رقم گئی'), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+              subtitle: Text(Loc.t('Amount + reason, done', 'رقم + وجہ، بس'), style: TextStyle(color: p.textMuted, fontSize: 12)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _quickCash('OUT');
+              },
+            ),
+            const Divider(),
+            item(Icons.account_balance_wallet_outlined, p.navy, Loc.t('Cash book (all entries)', 'کیش بک (سب اندراج)'),
+                Loc.t('Today in / out, edit', 'آج آیا / گیا'), const CashScreen()),
           ]),
         ),
+      ),
+    );
+  }
+
+  /// Seedha paisa aaya / gaya (Step 31): raqam, Cash / Bank, wajah — ek dialog, cash book mein darj.
+  Future<void> _quickCash(String type) async {
+    final p = ThemeManager.palette;
+    final inn = type == 'IN';
+    final amount = TextEditingController();
+    final note = TextEditingController();
+    var method = 'cash';
+    var expense = true; // OUT: kharcha (munafe se kam) ya sirf paisa nikla (transfer)
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          title: Text(inn ? Loc.t('Money in', 'رقم آئی') : Loc.t('Money out', 'رقم گئی')),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: amount,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: instDeco(p, Loc.t('Amount', 'رقم')),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: note,
+                decoration: instDeco(p, inn ? Loc.t('From whom / why', 'کس سے / کیوں') : Loc.t('To whom / why', 'کس کو / کیوں')),
+              ),
+              const SizedBox(height: 10),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'cash', label: Text(Loc.t('Cash', 'کیش'))),
+                  ButtonSegment(value: 'bank', label: Text(Loc.t('Bank', 'بینک'))),
+                ],
+                selected: {method},
+                onSelectionChanged: (v) => set(() => method = v.first),
+              ),
+              if (!inn) ...[
+                const SizedBox(height: 6),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: expense,
+                  onChanged: (v) => set(() => expense = v),
+                  title: Text(Loc.t('Shop expense', 'دکان کا خرچہ')),
+                  subtitle: Text(expense
+                      ? Loc.t('Bill, rent, tea... (reduces profit)', 'بل، کرایہ، چائے... (منافع سے کم)')
+                      : Loc.t('Only moved (bank, owner...)', 'صرف منتقل (بینک، مالک...)')),
+                ),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Cancel', 'منسوخ'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(Loc.t('Save', 'محفوظ کریں'))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final amt = instParse(amount.text);
+    if (amt <= 0) {
+      if (mounted) instToast(context, Loc.t('Enter a valid amount', 'صحیح رقم لکھیں'));
+      return;
+    }
+    try {
+      await CashRepository.instance.save(
+        type: type,
+        amount: amt,
+        method: method,
+        category: inn ? CashCategories.otherIncome : (expense ? CashCategories.miscellaneous : CashCategories.nonExpense),
+        note: note.text.trim(),
+      );
+      if (mounted) instToast(context, Loc.t('Saved', 'محفوظ ہو گیا'));
+      await _load();
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
+  }
+
+  /// Returns (Step 31): sale wapsi / purchase wapsi / qist ka saman wapas — kahan se karna hai.
+  Future<void> _returns() async {
+    final p = ThemeManager.palette;
+    final mgr = Session.isAdminOrManager;
+    Widget item(IconData icon, Color color, String title, String sub, Widget screen) => ListTile(
+          leading: CircleAvatar(backgroundColor: color.withOpacity(0.14), child: Icon(icon, color: color)),
+          title: Text(title, style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+          subtitle: Text(sub, style: TextStyle(color: p.textMuted, fontSize: 12)),
+          trailing: Icon(Icons.chevron_right, color: p.textMuted),
+          onTap: () {
+            Navigator.of(context).pop();
+            _push(screen);
+          },
+        );
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: p.bg,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          item(Icons.assignment_return_outlined, p.orange, Loc.t('Sale return (cash sale)', 'سیل واپسی (نقد سیل)'),
+              Loc.t('Open the sale, then "Sale return"', 'سیل کھولیں، پھر "سیل واپسی"'), const InstCashSalesScreen()),
+          if (mgr)
+            item(Icons.undo, p.red, Loc.t('Installment item taken back', 'قسط کا سامان واپس'),
+                Loc.t('Open the plan, ⋮ menu > "Take item back"', 'پلان کھولیں، ⋮ مینو > "سامان واپس لیں"'), const InstPlansScreen()),
+          if (mgr)
+            item(Icons.keyboard_return, p.navy, Loc.t('Purchase return (supplier)', 'خریداری واپسی (سپلائر)'),
+                Loc.t('Open the bill, then "Return"', 'بل کھولیں، پھر "واپس کریں"'), const InstPurchasesScreen()),
+          if (mgr)
+            item(Icons.history, p.textMuted, Loc.t('Returns history', 'واپسی کی ہسٹری'), Loc.t('All returns by date', 'سب واپسیاں تاریخ وار'),
+                const InstReturnsReportScreen()),
+          const SizedBox(height: 8),
+        ]),
       ),
     );
   }
@@ -300,6 +426,8 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
         () => _push(const InstBulkRemindScreen()));
     final tCheques = _Tile(Icons.payments_outlined, Loc.t('Cheques & Docs', 'چیک اور کاغذات'), Loc.t('Security held by shop', 'دکان کے پاس ضمانت'), p.navyLight,
         () => _push(const InstHeldSecuritiesScreen()));
+    final tReturns = _Tile(Icons.assignment_return_outlined, Loc.t('Returns', 'واپسی'), Loc.t('Sale / purchase return', 'سیل / خریداری واپسی'), p.orange,
+        _returns);
     final more = <_Tile>[
       if (mgr) tPlans,
       _Tile(Icons.format_list_numbered, Loc.t('Collection List', 'وصولی لسٹ'), Loc.t('Who to collect from', 'کس سے کتنا لینا ہے'), p.blue,
@@ -320,7 +448,8 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
       tCustomers,
       mgr ? tPurchases : tStock,
       mgr ? tReports : tPlans,
-      tScan,
+      if (kShowScan) tScan,
+      tReturns,
       tRemind,
       tCheques,
       _Tile(Icons.apps, Loc.t('More', 'مزید'), Loc.t('All other options', 'باقی سب'), p.textMuted, () => _more(p, more)),
@@ -346,11 +475,12 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
                 )
               : null,
           actions: [
-            IconButton(
-              tooltip: Loc.t('Scan & Sell', 'اسکین سے سیل'),
-              icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
-              onPressed: () => _push(const InstScanSaleScreen()),
-            ),
+            if (kShowScan)
+              IconButton(
+                tooltip: Loc.t('Scan & Sell', 'اسکین سے سیل'),
+                icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+                onPressed: () => _push(const InstScanSaleScreen()),
+              ),
             IconButton(
               tooltip: Loc.t('Sync now', 'ابھی سنک کریں'),
               onPressed: _syncing ? null : _syncNow,
@@ -390,6 +520,21 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
                       () => _push(const InstPlansScreen())),
                 ),
               ]),
+              if (Session.isAdminOrManager) ...[
+                const SizedBox(height: 10),
+                // Step 31: kul lena (customers se baqi qisten) aur kul dena (suppliers ka baqi).
+                Row(children: [
+                  Expanded(
+                    child: _tapStat(p, Loc.t('Receivable (to get)', 'لینا ہے'), instRs(_col.receivable),
+                        Loc.t('From customers', 'کسٹمرز سے'), p.teal, () => _push(const InstReceivableScreen())),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _tapStat(p, Loc.t('Payable (to give)', 'دینا ہے'), instRs(_payable),
+                        Loc.t('To suppliers', 'سپلائرز کو'), p.red, () => _push(const InstSuppliersScreen())),
+                  ),
+                ]),
+              ],
               const SizedBox(height: 10),
               Row(children: [
                 Expanded(child: _stat(p, Loc.t('Customers', 'کسٹمرز'), '${_stats.customers}', p.purple)),

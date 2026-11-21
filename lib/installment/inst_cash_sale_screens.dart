@@ -369,7 +369,7 @@ class _InstNewCashSaleScreenState extends State<InstNewCashSaleScreen> {
                         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         decoration: instDeco(p, Loc.t('Sale price *', 'قیمت فروخت *')),
                       ),
-                      if (money && it.costPrice > 0 && price > 0)
+                      if (kShowProfitOutsideReports && money && it.costPrice > 0 && price > 0)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
                           child: Text(
@@ -593,7 +593,7 @@ class _InstCashSaleDetailScreenState extends State<InstCashSaleDetailScreen> {
                           instInfoLine(p, Loc.t('Customer', 'کسٹمر'), v.sale.customerName),
                           instInfoLine(p, Loc.t('Phone', 'فون'), v.sale.phone),
                           instInfoLine(p, Loc.t('Paid by', 'ادائیگی'), v.sale.method == 'bank' ? Loc.t('Bank', 'بینک') : Loc.t('Cash', 'کیش')),
-                          if (money && v.sale.hasCost) ...[
+                          if (kShowProfitOutsideReports && money && v.sale.hasCost) ...[
                             instInfoLine(p, Loc.t('Cost', 'لاگت'), instRs(v.sale.costPrice)),
                             instInfoLine(p, Loc.t('Profit', 'منافع'), instRs(v.sale.profit)),
                           ],

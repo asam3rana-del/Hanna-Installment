@@ -207,7 +207,10 @@ class _InstReportsHubScreenState extends State<InstReportsHubScreen> {
           const InstDefaultersScreen(minDays: 1)),
       (Icons.call_received, Loc.t('Receivable', 'لینا ہے'), Loc.t('Customer-wise', 'کسٹمر وار'), p.orange, const InstReceivableScreen()),
       (Icons.call_made, Loc.t('Payable', 'دینا ہے'), Loc.t('Suppliers', 'سپلائرز'), p.amber, const InstSuppliersScreen()),
-      (Icons.local_shipping_outlined, Loc.t('Purchases', 'خریداری'), Loc.t('Bills', 'بل'), p.tealDark, const InstPurchasesScreen()),
+      (Icons.local_shipping_outlined, Loc.t('Purchase History', 'خریداری کی ہسٹری'), Loc.t('Bills by date', 'تاریخ وار بل'), p.tealDark,
+          const InstPurchaseReportScreen()),
+      (Icons.assignment_return_outlined, Loc.t('Returns History', 'واپسی کی ہسٹری'), Loc.t('Sale / qist / purchase', 'سیل / قسط / خریداری'), p.orange,
+          const InstReturnsReportScreen()),
     ];
     final width = MediaQuery.of(context).size.width;
     final cols = width >= 900 ? 4 : (width >= 600 ? 3 : 2);
@@ -874,6 +877,234 @@ class _InstReceivableScreenState extends State<InstReceivableScreen> {
                             Text('${Loc.t('late', 'لیٹ')} ${instRs(r.overdue)} • ${r.daysLate}${Loc.t('d', 'د')}',
                                 style: TextStyle(color: p.red, fontSize: 11.5)),
                         ]),
+                      ),
+                    ),
+                ]),
+        ),
+      ]),
+    );
+  }
+}
+
+// ================================================================== Step 31: purchase history / returns history
+
+/// Purchase history: muddat mein sab bill — supplier, pieces, raqam, ada, baqi. PDF / Excel.
+class InstPurchaseReportScreen extends StatefulWidget {
+  const InstPurchaseReportScreen({super.key});
+
+  @override
+  State<InstPurchaseReportScreen> createState() => _InstPurchaseReportScreenState();
+}
+
+class _InstPurchaseReportScreenState extends State<InstPurchaseReportScreen> {
+  List<InstPurchase> _rows = const [];
+  String _label = '';
+  bool _loaded = false;
+
+  Future<void> _load(int from, int to, String label) async {
+    final rows = await InstPurchaseRepository.instance.purchases(from: from, to: to);
+    if (!mounted) return;
+    setState(() {
+      _rows = rows;
+      _label = label;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _pdf() {
+    final total = _rows.fold<double>(0, (a, x) => a + x.total);
+    final due = _rows.fold<double>(0, (a, x) => a + x.due);
+    return InstPdf.shareTable(
+      context,
+      base: 'Purchase_History',
+      title: Loc.t('Purchase History', 'خریداری کی ہسٹری'),
+      sub: _label,
+      summary: [
+        (Loc.t('Bills', 'بل'), '${_rows.length}  •  ${Loc.t('pieces', 'پیس')} ${_rows.fold<int>(0, (a, x) => a + x.itemCount)}'),
+        (Loc.t('Total purchase', 'کل خریداری'), instRs(total)),
+        (Loc.t('Still to pay', 'ابھی دینا ہے'), instRs(due)),
+      ],
+      headers: [Loc.t('Date', 'تاریخ'), Loc.t('Bill', 'بل'), Loc.t('Supplier', 'سپلائر'), Loc.t('Pieces', 'پیس'), Loc.t('Total', 'کل'), Loc.t('Due', 'باقی')],
+      flex: const [2, 2, 4, 1, 2, 2],
+      right: const {3, 4, 5},
+      rows: [
+        for (final r in _rows) [_dShort(r.purchaseDate), r.billNo, r.supplierName, '${r.itemCount}', instRs(r.total), instRs(r.due)]
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ThemeManager.palette;
+    final total = _rows.fold<double>(0, (a, x) => a + x.total);
+    final returned = _rows.fold<double>(0, (a, x) => a + x.returned);
+    final due = _rows.fold<double>(0, (a, x) => a + x.due);
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Column(children: [
+        instHeader(context, p, Loc.t('Purchase History', 'خریداری کی ہسٹری'), _label, actions: [
+          IconButton(
+            tooltip: 'PDF / Excel',
+            icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white),
+            onPressed: _rows.isEmpty ? null : _pdf,
+          ),
+        ]),
+        _RangeBar(onChanged: _load),
+        Expanded(
+          child: !_loaded
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(padding: const EdgeInsets.fromLTRB(16, 6, 16, 32), children: [
+                  _card(p, [
+                    _line(p, Loc.t('Bills', 'بل'), '${_rows.length}', bold: true),
+                    _line(p, Loc.t('Pieces bought', 'خریدے پیس'), '${_rows.fold<int>(0, (a, x) => a + x.itemCount)}'),
+                    _line(p, Loc.t('Total purchase', 'کل خریداری'), instRs(total)),
+                    if (returned > 0) _line(p, Loc.t('Returned to suppliers', 'سپلائر کو واپس'), instRs(returned)),
+                    _line(p, Loc.t('Still to pay', 'ابھی دینا ہے'), instRs(due), c: due > 0.5 ? p.red : p.teal, bold: true),
+                  ]),
+                  instSectionTitle(p, Loc.t('BILLS', 'بل')),
+                  if (_rows.isEmpty) _empty(p, Loc.t('No purchase in this period.', 'اس دوران کوئی خریداری نہیں۔')),
+                  for (final r in _rows)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: instCard(p),
+                      child: ListTile(
+                        onTap: () => Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => InstPurchaseDetailScreen(purchaseId: r.id))),
+                        leading: Icon(Icons.local_shipping_outlined, color: p.tealDark),
+                        title: Text('${r.supplierName}  •  ${r.billNo}', style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+                        subtitle: Text(
+                          '${_dShort(r.purchaseDate)}  •  ${r.itemCount} ${Loc.t('pieces', 'پیس')}'
+                          '${r.due > 0.5 ? '  •  ${Loc.t('due', 'باقی')} ${instRs(r.due)}' : ''}',
+                          style: TextStyle(color: r.due > 0.5 ? p.red : p.textMuted, fontSize: 12),
+                        ),
+                        trailing: Text(instRs(r.total), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Ek wapsi (returns history ki line).
+class _ReturnRow {
+  final int date;
+  final String type; // sale / plan / purchase
+  final String party;
+  final String item;
+  final double amount;
+  final Widget? open;
+  const _ReturnRow(this.date, this.type, this.party, this.item, this.amount, this.open);
+}
+
+/// Returns history: naqd sale wapsi (refund), qist ka saman wapas, supplier ko wapsi — tareekh war. PDF / Excel.
+class InstReturnsReportScreen extends StatefulWidget {
+  const InstReturnsReportScreen({super.key});
+
+  @override
+  State<InstReturnsReportScreen> createState() => _InstReturnsReportScreenState();
+}
+
+class _InstReturnsReportScreenState extends State<InstReturnsReportScreen> {
+  List<_ReturnRow> _rows = const [];
+  String _label = '';
+  bool _loaded = false;
+
+  String _typeLabel(String t) => switch (t) {
+        'sale' => Loc.t('Sale return', 'سیل واپسی'),
+        'plan' => Loc.t('Qist item back', 'قسط سامان واپس'),
+        _ => Loc.t('Purchase return', 'خریداری واپسی'),
+      };
+
+  Future<void> _load(int from, int to, String label) async {
+    bool inRange(int t) => t >= from && t < to;
+    final out = <_ReturnRow>[];
+    for (final v in await InstCashSaleRepository.instance.list()) {
+      final at = v.sale.returnedAt;
+      if (at != null && inRange(at)) {
+        out.add(_ReturnRow(at, 'sale', v.sale.customerName, v.itemTitle, v.sale.refund, InstCashSaleDetailScreen(saleId: v.sale.id)));
+      }
+    }
+    for (final v in await InstPlanRepository.instance.list()) {
+      if (v.plan.status == planRepossessed && inRange(v.plan.closedAt)) {
+        out.add(_ReturnRow(v.plan.closedAt, 'plan', v.customerName, v.itemTitle, v.status.remaining, InstPlanDetailScreen(planId: v.plan.id)));
+      }
+    }
+    if (Session.isAdminOrManager) {
+      final names = {for (final s in await InstPurchaseRepository.instance.suppliers()) s.supplier.id: s.supplier.name};
+      for (final r in await InstPurchaseRepository.instance.returns()) {
+        if (inRange(r.returnedAt)) {
+          out.add(_ReturnRow(r.returnedAt, 'purchase', names[r.supplierId] ?? '', [r.itemTitle, r.itemCode].where((x) => x.isNotEmpty).join(' '),
+              r.amount, r.purchaseId == null ? null : InstPurchaseDetailScreen(purchaseId: r.purchaseId!)));
+        }
+      }
+    }
+    out.sort((a, b) => b.date.compareTo(a.date));
+    if (!mounted) return;
+    setState(() {
+      _rows = out;
+      _label = label;
+      _loaded = true;
+    });
+  }
+
+  double _sum(String t) => _rows.where((r) => r.type == t).fold<double>(0, (a, r) => a + r.amount);
+
+  Future<void> _pdf() => InstPdf.shareTable(
+        context,
+        base: 'Returns_History',
+        title: Loc.t('Returns History', 'واپسی کی ہسٹری'),
+        sub: _label,
+        summary: [
+          (Loc.t('Sale returns (refund)', 'سیل واپسی (واپس کیا)'), instRs(_sum('sale'))),
+          (Loc.t('Qist items back (remaining then)', 'قسط سامان واپس (اس وقت باقی)'), instRs(_sum('plan'))),
+          if (Session.isAdminOrManager) (Loc.t('Purchase returns', 'خریداری واپسی'), instRs(_sum('purchase'))),
+        ],
+        headers: [Loc.t('Date', 'تاریخ'), Loc.t('Type', 'قسم'), Loc.t('Party', 'فریق'), Loc.t('Item', 'سامان'), Loc.t('Amount', 'رقم')],
+        flex: const [2, 3, 3, 4, 2],
+        right: const {4},
+        rows: [for (final r in _rows) [_dShort(r.date), _typeLabel(r.type), r.party, r.item, instRs(r.amount)]],
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ThemeManager.palette;
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Column(children: [
+        instHeader(context, p, Loc.t('Returns History', 'واپسی کی ہسٹری'), _label, actions: [
+          IconButton(
+            tooltip: 'PDF / Excel',
+            icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white),
+            onPressed: _rows.isEmpty ? null : _pdf,
+          ),
+        ]),
+        _RangeBar(onChanged: _load),
+        Expanded(
+          child: !_loaded
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(padding: const EdgeInsets.fromLTRB(16, 6, 16, 32), children: [
+                  _card(p, [
+                    _line(p, Loc.t('Sale returns (refund)', 'سیل واپسی (واپس کیا)'), instRs(_sum('sale'))),
+                    _line(p, Loc.t('Qist items back (remaining then)', 'قسط سامان واپس (اس وقت باقی)'), instRs(_sum('plan'))),
+                    if (Session.isAdminOrManager) _line(p, Loc.t('Purchase returns', 'خریداری واپسی'), instRs(_sum('purchase'))),
+                  ]),
+                  instSectionTitle(p, Loc.t('RETURNS', 'واپسیاں')),
+                  if (_rows.isEmpty) _empty(p, Loc.t('No return in this period.', 'اس دوران کوئی واپسی نہیں۔')),
+                  for (final r in _rows)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: instCard(p),
+                      child: ListTile(
+                        onTap: r.open == null ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => r.open!)),
+                        leading: Icon(
+                          r.type == 'purchase' ? Icons.keyboard_return : (r.type == 'plan' ? Icons.undo : Icons.assignment_return_outlined),
+                          color: r.type == 'purchase' ? p.navy : p.orange,
+                        ),
+                        title: Text('${_typeLabel(r.type)}  •  ${r.party}', style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+                        subtitle: Text('${_dShort(r.date)}  •  ${r.item}', style: TextStyle(color: p.textMuted, fontSize: 12)),
+                        trailing: Text(instRs(r.amount), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
                       ),
                     ),
                 ]),

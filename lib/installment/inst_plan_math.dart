@@ -361,6 +361,6 @@ String receiptText({
   if (remaining <= 0.5) b.writeln('Plan complete. Thank you!');
   b
     ..writeln('------------------------')
-    ..write('Thank you — Hanna Installment');
+    ..write(shopName.trim().isEmpty ? 'Thank you!' : 'Thank you — ${shopName.trim()}');
   return b.toString();
 }

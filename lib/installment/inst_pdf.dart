@@ -23,6 +23,7 @@ import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
 import 'inst_repository.dart';
 import 'inst_terms.dart';
+import 'shop_logo.dart';
 import 'kyc_photo_store.dart';
 
 /// Qist ke PDF: (1) plan statement / agreement — customer + zamin ki tasveerein, CNIC, saman, schedule,
@@ -38,6 +39,7 @@ class InstPdf {
 
   static pw.Font? _urduFont;
   static pw.MemoryImage? _logo;
+  static pw.MemoryImage? _appLogo;
   static bool _logoTried = false;
 
   static String _rs(double v) {
@@ -59,8 +61,17 @@ class InstPdf {
     if (!_logoTried) {
       _logoTried = true;
       try {
-        _logo = pw.MemoryImage((await rootBundle.load('assets/images/logo.png')).buffer.asUint8List());
+        _appLogo = pw.MemoryImage((await rootBundle.load('assets/images/logo.png')).buffer.asUint8List());
       } catch (_) {}
+    }
+    // Step 31: dukaan ka apna logo (Settings > Shop Information) — warna dukaan ka naam ho to koi logo nahi
+    // (app ka naam / logo customer ke kaghaz par nahi), naam bhi na ho to app ka logo.
+    final shopLogo = await _img(await ShopLogo.path());
+    if (shopLogo != null) {
+      _logo = shopLogo;
+    } else {
+      final name = (await loadShopHeader()).name;
+      _logo = name.isEmpty ? _appLogo : null;
     }
   }
 

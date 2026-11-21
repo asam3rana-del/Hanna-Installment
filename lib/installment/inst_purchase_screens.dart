@@ -420,7 +420,7 @@ class _InstNewPurchaseScreenState extends State<InstNewPurchaseScreen> {
                       icon: const Icon(Icons.copy_all_outlined),
                       label: Text(Loc.t('Same model again (only new IMEI)', 'یہی ماڈل دوبارہ (صرف نیا IMEI)')),
                     ),
-                    if (Platform.isAndroid || Platform.isIOS) ...[
+                    if (kShowScan && (Platform.isAndroid || Platform.isIOS)) ...[
                       const SizedBox(height: 8),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(backgroundColor: p.navyLight, minimumSize: const Size.fromHeight(48)),

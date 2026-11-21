@@ -232,5 +232,14 @@ Naya kaam `lib/installment/` mein; POS ka purana code "Shop tools" se abhi bhi k
 - Receipt (PDF + text + naqd sale) hamesha English.
 - Purchase: "Yahi model dobara (sirf naya IMEI)" + "Yahi model: kai dabbe scan" (model / rate aakhri piece wala).
 
+## Step 31 — done (DB change nahi)
+- Munafa sirf Reports mein (`kShowProfitOutsideReports = false`): naya plan / plan / naqd sale / item par nahi.
+- Scan (sale + purchase) chhupa (`kShowScan = false`), code mojood.
+- Dashboard search: customer + saman (model / IMEI) — stock mein kitne, rate (naqd qeemat), status.
+- Lena / Dena saada: qist wasooli, "doosri raqam aayi", supplier ko, "kharcha / raqam gayi" (ek dialog), cash book.
+- Dashboard: "Returns" tile (sale / qist saman / purchase wapsi + history); Admin / Manager ko "Lena hai" / "Dena hai".
+- Reports: Purchase History, Returns History (PDF / Excel).
+- Dukaan ka logo (Settings > Shop Information) PDF par; dukaan ka naam ho to receipt / PDF par app ka naam / logo nahi.
+
 ## Abhi baqi
 - Feature graphic (Play Store)
