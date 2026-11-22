@@ -189,6 +189,7 @@ class BackupHelper {
     // app agli dafa screen par aaye to [flushPendingDownloadsCopies] copy kar deta hai.
     final copied = await DownloadsCopy.copy(dest, folder: folderName, fileName: fileName);
     if (!copied && Platform.isAndroid) await _addPendingDownloads(dest.path);
+    await copyToMirror(dest);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_lastBackupKey, DateTime.now().millisecondsSinceEpoch);
@@ -197,6 +198,56 @@ class BackupHelper {
 
   /// Restore/import ke andar safety backup: lock (`_busy`) pehle se hamare paas hai, isliye usay
   /// chhode baghair seedha backup banata hai — scheduler beech mein doosra backup/restore shuru nahi kar sakta.
+  // ---------------- doosra folder (PC) ----------------
+
+  /// PC (Windows / Linux / Mac) par har backup ki ek aur copy user ke chune folder mein — jaise D: drive ya USB.
+  /// C: drive / Windows kharab ho to data wahan se wapas aa jata hai. Khali = band.
+  static const mirrorKey = 'backup_mirror_dir';
+  static const mirrorKeep = 30; // doosre folder mein sab se naye 30 backup, purane khud hat jate hain
+
+  static bool get mirrorSupported => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  static Future<String> mirrorDir() async {
+    try {
+      return (await SharedPreferences.getInstance()).getString(mirrorKey)?.trim() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Future<void> setMirrorDir(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path.trim().isEmpty) {
+      await prefs.remove(mirrorKey);
+    } else {
+      await prefs.setString(mirrorKey, path.trim());
+    }
+  }
+
+  /// [file] ki copy doosre folder mein. Folder na mile (USB nikli hui) to chupchap false — asal backup theek.
+  static Future<bool> copyToMirror(File file) async {
+    if (!mirrorSupported) return false;
+    final base = await mirrorDir();
+    if (base.isEmpty) return false;
+    try {
+      if (!await Directory(base).exists()) return false;
+      final dir = Directory(p.join(base, folderName));
+      if (!await dir.exists()) await dir.create(recursive: true);
+      await file.copy(p.join(dir.path, p.basename(file.path)));
+      final old = <File>[];
+      await for (final e in dir.list()) {
+        if (e is File && p.extension(e.path).toLowerCase() == '.$backupExtension') old.add(e);
+      }
+      old.sort((a, b) => p.basename(b.path).compareTo(p.basename(a.path)));
+      for (final f in old.skip(mirrorKeep)) {
+        await _deleteQuietly(f);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<File?> _safetyBackup() async {
     try {
       return await _backupNowUnlocked();

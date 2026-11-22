@@ -51,6 +51,7 @@ class _BackupBodyState extends State<_BackupBody> {
   List<File> _backups = [];
   bool _loadingBackups = false;
   int _lastOffsite = 0; // OffsiteBackup: aakhri dafa phone se bahar share (0 = kabhi nahi)
+  String _mirror = ''; // PC: backup ki doosri copy ka folder (khali = band)
 
   bool get _isAdmin => Session.isAdmin;
 
@@ -58,6 +59,71 @@ class _BackupBodyState extends State<_BackupBody> {
   void initState() {
     super.initState();
     if (_isAdmin) _loadBackups();
+    if (BackupHelper.mirrorSupported) {
+      BackupHelper.mirrorDir().then((v) {
+        if (mounted) setState(() => _mirror = v);
+      });
+    }
+  }
+
+  Future<void> _pickMirror() async {
+    final dir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: Loc.t('Choose second backup folder (e.g. D: drive or USB)', 'بیک اپ کا دوسرا فولڈر چنیں (مثلاً D: یا USB)'),
+    );
+    if (dir == null || dir.trim().isEmpty) return;
+    await BackupHelper.setMirrorDir(dir);
+    if (mounted) setState(() => _mirror = dir.trim());
+    // Sab se naya backup foran wahan bhi copy — intezar na karna pade.
+    if (_backups.isNotEmpty && await BackupHelper.copyToMirror(_backups.first)) {
+      _toast(Loc.t('Backup copied to the second folder too.', 'بیک اپ دوسرے فولڈر میں بھی کاپی ہو گیا۔'));
+    } else {
+      _toast(Loc.t('Second folder set. Next backup will be copied there.', 'دوسرا فولڈر سیٹ ہو گیا۔ اگلا بیک اپ وہاں بھی جائے گا۔'));
+    }
+  }
+
+  Widget _mirrorCard() {
+    final on = _mirror.isNotEmpty;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _p.cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: (on ? _p.teal : _p.red).withValues(alpha: 0.5)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(Loc.t('Second backup folder (PC)', 'بیک اپ کا دوسرا فولڈر (PC)'),
+            style: TextStyle(fontWeight: FontWeight.bold, color: on ? _p.teal : _p.red)),
+        const SizedBox(height: 4),
+        Text(
+          on
+              ? _mirror
+              : Loc.t('Off. Choose a folder on another drive (D:) or a USB — every backup will be copied there too.',
+                  'بند ہے۔ کسی دوسری ڈرائیو (D:) یا USB میں فولڈر چنیں — ہر بیک اپ وہاں بھی کاپی ہو گا۔'),
+          style: TextStyle(fontSize: 12, color: _p.textMuted),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.folder_open),
+              label: Text(on ? Loc.t('CHANGE', 'بدلیں') : Loc.t('CHOOSE FOLDER', 'فولڈر چنیں')),
+              onPressed: _pickMirror,
+            ),
+          ),
+          if (on) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () async {
+                await BackupHelper.setMirrorDir('');
+                if (mounted) setState(() => _mirror = '');
+              },
+              child: Text(Loc.t('Turn off', 'بند کریں')),
+            ),
+          ],
+        ]),
+      ]),
+    );
   }
 
   // ---------------- helpers ----------------
@@ -608,6 +674,7 @@ class _BackupBodyState extends State<_BackupBody> {
               _bigButton(Loc.t('📂 Restore from file…', '📂 فائل سے بحال کریں…'), _p.red, _restoreFromFile),
               const SizedBox(height: 12),
               _offsiteCard(),
+              if (BackupHelper.mirrorSupported) _mirrorCard(),
               _sectionTitle(Loc.t('Saved backups', 'محفوظ بیک اپ')),
               if (_loadingBackups)
                 const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()))
