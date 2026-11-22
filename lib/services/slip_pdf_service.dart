@@ -11,6 +11,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../db/user_repository.dart';
+import '../installment/shop_logo.dart';
+import 'payment_info.dart';
 import '../utils/pdf_urdu.dart';
 import '../utils/slip_pdf_data.dart';
 
@@ -27,15 +29,22 @@ class SlipPdfService {
   static pw.Font? _urduFont;
   static pw.MemoryImage? _logo;
   static String _owner = '';
-  static bool _logoTried = false;
+  static String _payInfo = '';
 
-  /// Dukaan ka logo (assets/images/logo.png) — header mein. Na mile to chupchap nahi lagta.
-  static Future<void> _loadLogo() async {
-    if (_logoTried) return;
-    _logoTried = true;
+  /// Header ka logo: dukaan ka apna logo (Settings) > shop name na ho to app logo > warna koi logo nahi
+  /// (dukaan ke bill par Hanna ka logo nahi). Har PDF par dobara dekha jata hai.
+  static Future<void> _loadLogo(String shopName) async {
+    _logo = null;
     try {
-      _logo = pw.MemoryImage((await rootBundle.load('assets/images/logo.png')).buffer.asUint8List());
-    } catch (_) {}
+      final own = await ShopLogo.path();
+      if (own != null) {
+        _logo = pw.MemoryImage(await File(own).readAsBytes());
+      } else if (shopName.trim().isEmpty) {
+        _logo = pw.MemoryImage((await rootBundle.load('assets/images/logo.png')).buffer.asUint8List());
+      }
+    } catch (_) {
+      _logo = null;
+    }
   }
 
   static Future<pw.Font?> _loadUrduFont() async {
@@ -155,12 +164,12 @@ class SlipPdfService {
         if (d.meta.isNotEmpty) pw.Padding(padding: const pw.EdgeInsets.only(top: 8), child: pw.Column(children: [for (final k in d.meta) _kv(k)])),
         for (final b in d.blocks) ..._block(b),
         pw.SizedBox(height: 14),
-        if (!_noPayInfo.contains(d.title))
+        if (_payInfo.isNotEmpty && !_noPayInfo.contains(d.title))
           pw.Container(
           margin: const pw.EdgeInsets.only(bottom: 8),
           padding: const pw.EdgeInsets.symmetric(vertical: 5),
           decoration: const pw.BoxDecoration(border: pw.Border.symmetric(horizontal: pw.BorderSide(color: _teal, width: 0.8))),
-          child: pw.Center(child: _text(slipPayInfo, size: 12, bold: true, argb: 0xFF0F9B8E)),
+          child: pw.Center(child: _text(_payInfo, size: 12, bold: true, argb: 0xFF0F9B8E)),
         ),
         if (d.footer.isNotEmpty) pw.Center(child: _text(d.footer, size: 11, bold: true, argb: 0xFF8A90A6)),
       ];
@@ -185,7 +194,9 @@ class SlipPdfService {
 
   static Future<Uint8List> _build(List<SlipPdfData> ds) async {
     final urdu = await _loadUrduFont();
-    await _loadLogo();
+    await _loadLogo(ds.isEmpty ? '' : ds.first.shopName);
+    // Payment ki tafseel dukaandar ki apni (Settings > Shop Information) — khali ho to bill par kuch nahi chhapta.
+    _payInfo = (await PaymentInfo.load()).split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).join('   |   ');
     try {
       _owner = (await UserRepository.instance.getSetting('shop_owner'))?.trim() ?? '';
     } catch (_) {

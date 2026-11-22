@@ -541,9 +541,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 minLines: 2,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: Loc.t('Payment details for reminders', 'یاد دہانی میں ادائیگی کی تفصیل'),
-                  hintText: 'Raast ID: 03001234567\nJazzCash: 03001234567 (Asam)\nBank: Meezan PK00MEZN0000000000000000',
-                  helperText: Loc.t('Added under every WhatsApp due reminder', 'ہر واٹس ایپ یاد دہانی کے نیچے لگے گا'),
+                  labelText: Loc.t('Payment details (Raast / JazzCash / Bank)', 'ادائیگی کی تفصیل (راست / جاز کیش / بینک)'),
+                  hintText: Loc.t('e.g. JazzCash: your number', 'مثلاً جاز کیش: اپنا نمبر'),
+                  helperText: Loc.t('Printed on bills and added under WhatsApp reminders. Empty = nothing shown.',
+                      'بل پر چھپے گا اور واٹس ایپ یاد دہانی میں لگے گا۔ خالی = کچھ نہیں دکھے گا۔'),
                   filled: true,
                   fillColor: ThemeManager.palette.fieldFill,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

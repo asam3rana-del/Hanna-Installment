@@ -53,6 +53,13 @@
     <button id="go">Key banayein</button>
     <div id="err" class="err"></div>
   </div>
+  <div class="card" id="result" style="display:none">
+    <div class="ok" id="summary"></div>
+    <label>License key (customer ko bhejein)</label>
+    <textarea id="out" rows="5" readonly></textarea>
+    <button class="sec" id="copy">Copy key</button>
+    <button class="sec" id="copyRec">Copy record line (licenses.csv ke liye)</button>
+  </div>
   <div class="card">
     <label>Naya key pair (rotation) — sirf ek dafa</label>
     <div style="font-size:12px;color:#667;margin-bottom:8px">Purani private key kisi ne dekh li ho to naya jora banayein. PRIVATE key file
@@ -67,13 +74,6 @@
       <textarea id="newPub" rows="2" readonly></textarea>
       <button class="sec" id="copyPub">Copy public key</button>
     </div>
-  </div>
-  <div class="card" id="result" style="display:none">
-    <div class="ok" id="summary"></div>
-    <label>License key (customer ko bhejein)</label>
-    <textarea id="out" rows="5" readonly></textarea>
-    <button class="sec" id="copy">Copy key</button>
-    <button class="sec" id="copyRec">Copy record line (licenses.csv ke liye)</button>
   </div>
 </main>
 <script>
@@ -218,6 +218,7 @@ if (typeof document !== "undefined") {
           $("summary").textContent = `Serial ${serial} • ${type} • ${iso(new Date(EPOCH + ti * 86400000))} → ${exp} • ${norm($("dev").value)}`;
           lastRec = [serial, iso(new Date(EPOCH + ti * 86400000)), type, exp, norm($("dev").value), JSON.stringify($("cust").value), key].join(",");
           $("result").style.display = ""; $("serial").value = serial + 1;
+          try { $("result").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
         } catch (e) { $("err").textContent = e.message; }
         $("go").disabled = false; $("go").textContent = "Key banayein";
       }, 30);

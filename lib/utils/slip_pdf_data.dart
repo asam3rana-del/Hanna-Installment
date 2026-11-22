@@ -45,8 +45,7 @@ class SlipBlock {
 /// PDF ke neeche dhanyawad (Urdu). Shop ki apni `receipt_footer` set ho to wo chalti hai.
 const String slipThanks = 'خریداری کا شکریہ';
 
-/// PDF ke neeche payment ki maloomat (Urdu + number).
-const String slipPayInfo = 'جاز کیش / راست: 03006296815';
+// Payment ki maloomat ab hardcoded nahi — SlipPdfService dukaandar ki apni `payment_info` setting chhapta hai.
 
 class SlipPdfData {
   final String shopName;

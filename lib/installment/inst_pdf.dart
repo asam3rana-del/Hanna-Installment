@@ -12,6 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../db/due_reminders_repository.dart' show whatsAppDigits;
 import '../services/party_photo_store.dart';
+import '../services/payment_info.dart';
 import '../services/slip_pdf_service.dart';
 import '../services/whatsapp_pdf.dart';
 import '../services/whatsapp_sender.dart';
@@ -379,6 +380,8 @@ class InstPdf {
     await PartyPhotoStore.instance.ensureLoaded();
     final face = await _img(PartyPhotoStore.instance.pathFor(true, v.plan.customerId));
     final next = v.status.next;
+    // Dukaandar ki apni Raast / JazzCash / bank tafseel (Settings) — khali ho to receipt par kuch nahi.
+    final payInfo = (await PaymentInfo.load()).trim();
     // Receipt hamesha English mein (Step 30) — customer / doosre log aasani se parh sakein.
 
     List<pw.Widget> build() => [
@@ -415,6 +418,17 @@ class InstPdf {
             pw.Padding(
               padding: const pw.EdgeInsets.only(top: 6),
               child: _t('Late amount: ${_rs(v.status.overdue)}', size: 10, bold: true, argb: 0xFFD64545),
+            ),
+          if (payInfo.isNotEmpty && remainingAfter > 0.5)
+            pw.Container(
+              margin: const pw.EdgeInsets.only(top: 10),
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: _teal, width: 0.8), borderRadius: pw.BorderRadius.circular(6)),
+              child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                _t('Pay next installment to:', size: 10, bold: true, argb: 0xFF0F9B8E),
+                for (final l in payInfo.split('\n'))
+                  if (l.trim().isNotEmpty) _t(l.trim(), size: 10),
+              ]),
             ),
         ];
 
