@@ -11,6 +11,7 @@ import '../services/crash_handler.dart';
 import '../services/crash_reporter.dart';
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_collection_screens.dart';
@@ -50,7 +51,29 @@ class InstallmentHomeScreen extends StatefulWidget {
   State<InstallmentHomeScreen> createState() => _InstallmentHomeScreenState();
 }
 
-class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
+class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with RouteAware {
+  PageRoute<dynamic>? _route;
+
+  // Desktop: dashboard samne ho to frame chaura (main.dart _DesktopFrame), koi aur screen khule to wapas 900 px.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final r = ModalRoute.of(context);
+    if (isDesktopApp && r is PageRoute && r != _route) {
+      if (_route != null) desktopRouteObserver.unsubscribe(this);
+      _route = r;
+      desktopRouteObserver.subscribe(this, r);
+      setDesktopWide(true);
+    }
+  }
+
+  @override
+  void didPush() => setDesktopWide(true);
+  @override
+  void didPopNext() => setDesktopWide(true);
+  @override
+  void didPushNext() => setDesktopWide(false);
+
   InstHomeStats _stats = const InstHomeStats();
   InstCollectionStats _col = const InstCollectionStats();
   bool _syncing = false;
@@ -165,6 +188,8 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
   @override
   void dispose() {
     InstRepository.instance.changes.removeListener(_load);
+    if (_route != null) desktopRouteObserver.unsubscribe(this);
+    setDesktopWide(false);
     super.dispose();
   }
 
@@ -404,6 +429,8 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
   Widget build(BuildContext context) {
     final p = ThemeManager.palette;
     final width = MediaQuery.of(context).size.width;
+    // PC (chauri window): upar ek line mein raqam + aaj ki qisten, neeche bayen tiles (choti, lambi) aur dayen chart.
+    final desk = isDesktopApp && width >= 1100;
     final cols = width >= 1000 ? 4 : (width >= 640 ? 3 : 2);
     // Step 30: 8 main tiles + "More" (baqi sab). Purchase + stock ek hi jagah (purchase se stock khud banta hai).
     final mgr = Session.isAdminOrManager;
@@ -453,6 +480,56 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
       tCheques,
       _Tile(Icons.apps, Loc.t('More', 'مزید'), Loc.t('All other options', 'باقی سب'), p.textMuted, () => _more(p, more)),
     ];
+    final moneyCard = Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+      decoration: instCard(p),
+      child: Row(children: [
+        Expanded(
+          child: InkWell(
+            onTap: () => _push(const InstReceivableScreen()),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(Loc.t('Receivable (to get)', 'لینا ہے'), style: TextStyle(color: p.textMuted, fontSize: 12)),
+              Text(_showMoney ? instRs(_col.receivable) : 'Rs ••••••',
+                  style: TextStyle(color: p.teal, fontWeight: FontWeight.bold, fontSize: 18)),
+            ]),
+          ),
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: () => _push(const InstSuppliersScreen()),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(Loc.t('Payable (to give)', 'دینا ہے'), style: TextStyle(color: p.textMuted, fontSize: 12)),
+              Text(_showMoney ? instRs(_payable) : 'Rs ••••••',
+                  style: TextStyle(color: p.red, fontWeight: FontWeight.bold, fontSize: 18)),
+            ]),
+          ),
+        ),
+        IconButton(
+          tooltip: _showMoney ? Loc.t('Hide', 'چھپائیں') : Loc.t('Show', 'دکھائیں'),
+          icon: Icon(_showMoney ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: p.textMuted),
+          onPressed: () => setState(() => _showMoney = !_showMoney),
+        ),
+      ]),
+    );
+    final statsRow = Row(children: [
+      Expanded(
+        child: _tapStat(p, Loc.t('Due today', 'آج کی قسطیں'), instRs(_col.dueToday),
+            Loc.t('${_col.dueTodayCount} customers', '${_col.dueTodayCount} کسٹمر'), p.amber,
+            () => _push(const InstCollectionListScreen(initial: CollectWindow.today))),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: _tapStat(p, Loc.t('Late', 'لیٹ'), instRs(_col.overdue),
+            Loc.t('${_col.overdueCount} customers', '${_col.overdueCount} کسٹمر'), p.red,
+            () => _push(const InstDefaultersScreen(minDays: 1))),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: _tapStat(p, Loc.t('Collected', 'آج وصولی'), instRs(_col.collectedToday),
+            Loc.t('Today', 'آج'), p.teal,
+            () => _push(const InstPlansScreen())),
+      ),
+    ]);
     return Scaffold(
       backgroundColor: p.bg,
       body: Column(children: [
@@ -498,73 +575,51 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,
-            child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
+            child: ListView(padding: desk ? const EdgeInsets.fromLTRB(24, 20, 24, 32) : const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
               // Step 32: sab se upar Lena / Dena (chhupa — aankh dabakar dekhein), phir search, phir aaj ki qisten.
-              if (Session.isAdminOrManager) ...[
-                Container(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
-                  decoration: instCard(p),
-                  child: Row(children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => _push(const InstReceivableScreen()),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(Loc.t('Receivable (to get)', 'لینا ہے'), style: TextStyle(color: p.textMuted, fontSize: 12)),
-                          Text(_showMoney ? instRs(_col.receivable) : 'Rs ••••••',
-                              style: TextStyle(color: p.teal, fontWeight: FontWeight.bold, fontSize: 18)),
-                        ]),
-                      ),
-                    ),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => _push(const InstSuppliersScreen()),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(Loc.t('Payable (to give)', 'دینا ہے'), style: TextStyle(color: p.textMuted, fontSize: 12)),
-                          Text(_showMoney ? instRs(_payable) : 'Rs ••••••',
-                              style: TextStyle(color: p.red, fontWeight: FontWeight.bold, fontSize: 18)),
-                        ]),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: _showMoney ? Loc.t('Hide', 'چھپائیں') : Loc.t('Show', 'دکھائیں'),
-                      icon: Icon(_showMoney ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: p.textMuted),
-                      onPressed: () => setState(() => _showMoney = !_showMoney),
-                    ),
-                  ]),
-                ),
+              if (desk) ...[
+                // PC: raqam + aaj ki qisten ek line mein.
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (Session.isAdminOrManager) ...[Expanded(flex: 2, child: moneyCard), const SizedBox(width: 12)],
+                  Expanded(flex: 3, child: statsRow),
+                ]),
                 const SizedBox(height: 12),
+                const InstHomeSearch(),
+                const SizedBox(height: 4),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    flex: 3,
+                    child: GridView.count(
+                      crossAxisCount: width >= 1450 ? 4 : 3,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 2.4,
+                      children: [for (final t in tiles) _deskTile(p, t)],
+                    ),
+                  ),
+                  if (Session.isAdminOrManager) ...[
+                    const SizedBox(width: 16),
+                    const Expanded(flex: 2, child: InstTrendChart()),
+                  ],
+                ]),
+              ] else ...[
+                if (Session.isAdminOrManager) ...[moneyCard, const SizedBox(height: 12)],
+                const InstHomeSearch(),
+                statsRow,
+                const SizedBox(height: 16),
+                GridView.count(
+                  crossAxisCount: cols,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.15,
+                  children: [for (final t in tiles) _tile(p, t)],
+                ),
+                if (Session.isAdminOrManager) const InstTrendChart(),
               ],
-              const InstHomeSearch(),
-              Row(children: [
-                Expanded(
-                  child: _tapStat(p, Loc.t('Due today', 'آج کی قسطیں'), instRs(_col.dueToday),
-                      Loc.t('${_col.dueTodayCount} customers', '${_col.dueTodayCount} کسٹمر'), p.amber,
-                      () => _push(const InstCollectionListScreen(initial: CollectWindow.today))),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _tapStat(p, Loc.t('Late', 'لیٹ'), instRs(_col.overdue),
-                      Loc.t('${_col.overdueCount} customers', '${_col.overdueCount} کسٹمر'), p.red,
-                      () => _push(const InstDefaultersScreen(minDays: 1))),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _tapStat(p, Loc.t('Collected', 'آج وصولی'), instRs(_col.collectedToday),
-                      Loc.t('Today', 'آج'), p.teal,
-                      () => _push(const InstPlansScreen())),
-                ),
-              ]),
-              const SizedBox(height: 16),
-              GridView.count(
-                crossAxisCount: cols,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.15,
-                children: [for (final t in tiles) _tile(p, t)],
-              ),
-              if (Session.isAdminOrManager) const InstTrendChart(),
             ]),
           ),
         ),
@@ -592,6 +647,35 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> {
             ),
             Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.textMuted, fontSize: 10.5)),
           ]),
+        ),
+      );
+
+  /// PC ka tile: lamba aur chhota — icon bayen, naam dayen (mouse se aasaan, ek nazar mein zyada options).
+  Widget _deskTile(AppPalette p, _Tile t) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: t.onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: instCard(p, 16),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: t.color.withOpacity(0.13), borderRadius: BorderRadius.circular(12)),
+                child: Icon(t.icon, color: t.color, size: 26),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 2),
+                  Text(t.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.textMuted, fontSize: 11.5)),
+                ]),
+              ),
+            ]),
+          ),
         ),
       );
 

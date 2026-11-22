@@ -28,6 +28,7 @@ import 'sync/settings_sync.dart';
 import 'sync/sync_keepalive.dart';
 import 'sync/sync_worker.dart';
 import 'theme/theme_manager.dart';
+import 'utils/desktop_layout.dart';
 import 'utils/loc.dart';
 
 void main() async {
@@ -119,6 +120,7 @@ class AhDeveloperApp extends StatelessWidget {
         final demo = DemoMode.enabled;
         return MaterialApp(
           navigatorKey: AppLock.navigatorKey,
+          navigatorObservers: [desktopRouteObserver],
           // zabaan / theme badalne par saari screens dobara ban jayein
           // Demo on/off par bhi poora tree naya (kisi screen mein doosri dukaan ka purana data na reh jaye).
           key: ValueKey('$lang-$dark-$demo'),
@@ -194,13 +196,20 @@ class _DesktopFrame extends StatelessWidget {
   final Color background;
 
   static const double maxWidth = 900;
+  static const double wideMaxWidth = 1600; // dashboard (desktopWideScreen) ke liye
 
   @override
   Widget build(BuildContext context) {
     if (!_isDesktop) return child;
     return ColoredBox(
       color: background,
-      child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: maxWidth), child: child)),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: desktopWideScreen,
+        child: child,
+        builder: (context, wide, c) => Center(
+          child: ConstrainedBox(constraints: BoxConstraints(maxWidth: wide ? wideMaxWidth : maxWidth), child: c),
+        ),
+      ),
     );
   }
 }
