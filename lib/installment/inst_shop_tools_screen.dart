@@ -13,6 +13,7 @@ import '../screens/utility_bills_screen.dart';
 import '../screens/workers_screen.dart';
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import 'inst_ui.dart';
 import 'inst_terms.dart';
@@ -49,6 +50,8 @@ class InstShopToolsScreen extends StatelessWidget {
         instHeader(context, p, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, backup', 'کیش، خرچے، اسٹاف، بیک اپ')),
         Expanded(
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
+           // PC: do columns.
+           ...deskTwoCols(context, [
             for (final (icon, title, sub, color, open) in rows)
               Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -84,6 +87,7 @@ class InstShopToolsScreen extends StatelessWidget {
                 onTap: () => InstUpdate.checkNow(context),
               ),
             ),
+           ]),
           ]),
         ),
       ]),

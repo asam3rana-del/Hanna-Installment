@@ -133,7 +133,11 @@ class AhDeveloperApp extends StatelessWidget {
             textDirection: lang == 'ur' ? TextDirection.rtl : TextDirection.ltr,
             child: _BottomSystemBarGuard(
               background: p.bg,
-              child: _DesktopFrame(
+              // PC: bayen menu (login ke baad), phir screen beech mein.
+              child: DesktopShell(
+                navy: p.navy,
+                title: demo ? 'Hanna Installment (DEMO)' : 'Hanna Installment',
+                child: _DesktopFrame(
                 background: p.bg,
                 // Demo dukaan har screen par saaf nazar aaye, taake asal hisaab samajh kar entry na ho.
                 child: demo
@@ -144,6 +148,7 @@ class AhDeveloperApp extends StatelessWidget {
                         child: child!,
                       )
                     : child!,
+              ),
               ),
             ),
           ),
@@ -195,7 +200,7 @@ class _DesktopFrame extends StatelessWidget {
   final Widget child;
   final Color background;
 
-  static const double maxWidth = 900;
+  static const double maxWidth = 1100;
   static const double wideMaxWidth = 1600; // dashboard (desktopWideScreen) ke liye
 
   @override

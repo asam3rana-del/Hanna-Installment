@@ -70,7 +70,36 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
   @override
   void didPush() => setDesktopWide(true);
   @override
-  void didPopNext() => setDesktopWide(true);
+  void didPopNext() {
+    setDesktopWide(true);
+    selectDesktopNav(0); // wapas dashboard par — sidebar mein bhi Dashboard
+  }
+
+  bool _navSet = false;
+
+  void _onDesktopNav() {
+    if (mounted) setState(() {});
+  }
+
+  /// PC sidebar: dashboard ke sab options + Reports / Settings / Logout. Har option pehle dashboard tak wapas,
+  /// phir nayi screen — screens ek ke upar ek jama nahi hoti.
+  void _registerDesktopNav(List<_Tile> main, List<_Tile> more) {
+    if (!isDesktopApp || _navSet) return;
+    _navSet = true;
+    void go(VoidCallback open) {
+      Navigator.of(context).popUntil((r) => r.isFirst);
+      open();
+    }
+
+    final mgr = Session.isAdminOrManager;
+    setDesktopNav(owner: this, [
+      DesktopNavItem(Icons.dashboard_outlined, Loc.t('Dashboard', 'ڈیش بورڈ'), () => Navigator.of(context).popUntil((r) => r.isFirst)),
+      for (final t in [...main, ...more]) DesktopNavItem(t.icon, t.title, () => go(t.onTap)),
+      if (mgr) DesktopNavItem(Icons.insights_outlined, Loc.t('Reports', 'رپورٹس'), () => go(() => _push(const InstReportsHubScreen()))),
+      if (mgr) DesktopNavItem(Icons.settings_outlined, Loc.t('Settings', 'سیٹنگز'), () => go(() => _push(const SettingsScreen())), bottom: true),
+      DesktopNavItem(Icons.logout, Loc.t('Log out', 'لاگ آؤٹ'), _logout, bottom: true, danger: true),
+    ]);
+  }
   @override
   void didPushNext() => setDesktopWide(false);
 
@@ -113,6 +142,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
   void initState() {
     super.initState();
     InstRepository.instance.changes.addListener(_load);
+    desktopNavItems.addListener(_onDesktopNav); // sidebar aaya / gaya => chaurai badli
     _load();
     // "Secure Cloud Login (staff)" Settings se hata diya (staff server set nahi). Pehle ON kiya ho to OFF — warna
     // sync anonymous par wapas nahi jata aur ruk jata hai.
@@ -188,8 +218,9 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
   @override
   void dispose() {
     InstRepository.instance.changes.removeListener(_load);
+    desktopNavItems.removeListener(_onDesktopNav);
     if (_route != null) desktopRouteObserver.unsubscribe(this);
-    setDesktopWide(false);
+    setDesktopNav(null, owner: this); // menu bhi hatata hai aur frame bhi wapas patla (sirf agar yahi dashboard tha)
     super.dispose();
   }
 
@@ -208,6 +239,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
           _stats = s;
           _col = c;
           _shopName = name;
+          if (isDesktopApp) desktopNavTitle.value = name;
           _shopPhone = phone;
           _payable = payable;
         });
@@ -428,9 +460,10 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
   @override
   Widget build(BuildContext context) {
     final p = ThemeManager.palette;
-    final width = MediaQuery.of(context).size.width;
+    // PC par sidebar ki jagah nikal kar asal chaurai.
+    final width = MediaQuery.of(context).size.width - (isDesktopApp && desktopNavItems.value != null ? DesktopShell.width : 0);
     // PC (chauri window): upar ek line mein raqam + aaj ki qisten, neeche bayen tiles (choti, lambi) aur dayen chart.
-    final desk = isDesktopApp && width >= 1100;
+    final desk = isDesktopApp && width >= 950;
     final cols = width >= 1000 ? 4 : (width >= 640 ? 3 : 2);
     // Step 30: 8 main tiles + "More" (baqi sab). Purchase + stock ek hi jagah (purchase se stock khud banta hai).
     final mgr = Session.isAdminOrManager;
@@ -480,6 +513,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
       tCheques,
       _Tile(Icons.apps, Loc.t('More', 'مزید'), Loc.t('All other options', 'باقی سب'), p.textMuted, () => _more(p, more)),
     ];
+    _registerDesktopNav(tiles.where((t) => t.icon != Icons.apps).toList(), more);
     final moneyCard = Container(
       padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
       decoration: instCard(p),
@@ -590,7 +624,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
                   Expanded(
                     flex: 3,
                     child: GridView.count(
-                      crossAxisCount: width >= 1450 ? 4 : 3,
+                      crossAxisCount: width >= 1300 ? 4 : 3,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       mainAxisSpacing: 12,

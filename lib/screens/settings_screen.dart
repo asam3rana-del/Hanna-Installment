@@ -16,6 +16,7 @@ import '../utils/escpos.dart';
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/due_days.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import '../utils/stock_policy.dart';
 import '../utils/password_hasher.dart';
@@ -477,6 +478,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(backgroundColor: ThemeManager.palette.navy, foregroundColor: Colors.white, title: Text(Loc.t('Settings', 'سیٹنگز'))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         PremiumHeader(title: _headerShop, subtitle: Loc.t('INSTALLMENT SHOP', 'قسط کی دکان')),
+        // PC: cards do columns mein (deskTwoCols); mobile par pehle jaisa.
+        ...deskTwoCols(context, [
         // Step 32: Reports dashboard se yahan (Admin / Manager).
         if (Session.isAdminOrManager)
           Card(
@@ -779,6 +782,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : Loc.t('OPEN DEMO SHOP', 'ڈیمو دکان کھولیں')),
             ),
           ]),
+        ]),
         OutlinedButton.icon(
           onPressed: _logout,
           icon: Icon(Icons.logout, color: ThemeManager.palette.red),

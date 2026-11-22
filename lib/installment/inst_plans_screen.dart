@@ -8,6 +8,7 @@ import '../services/party_photo_store.dart';
 import '../services/session.dart';
 import '../services/whatsapp_sender.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
 import 'inst_customers_screen.dart';
@@ -627,22 +628,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
     final money = [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))];
     void re(_) => setState(() {});
     Widget gap() => const SizedBox(height: 12);
-    return Scaffold(
-      backgroundColor: p.bg,
-      body: Column(children: [
-        instHeader(context, p, _cashSale ? Loc.t('Cash Sale', 'نقد سیل') : Loc.t('New Installment', 'نئی قسط'),
-            Loc.t('Customer → item → plan', 'کسٹمر ← سامان ← پلان')),
-        Expanded(
-          child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
-            const SizedBox(height: 8),
-            SegmentedButton<bool>(
-              segments: [
-                ButtonSegment(value: false, icon: const Icon(Icons.add_card), label: Text(Loc.t('Installment', 'قسط'))),
-                ButtonSegment(value: true, icon: const Icon(Icons.point_of_sale), label: Text(Loc.t('Cash sale', 'نقد سیل'))),
-              ],
-              selected: {_cashSale},
-              onSelectionChanged: (v) => setState(() => _cashSale = v.first),
-            ),
+    final deskTwo = isDesktopWide(context);
+    final leftCol = <Widget>[
             instSectionTitle(p, Loc.t('1. CUSTOMER', '1۔ کسٹمر')),
             _customerCard(p),
             if (_customer != null && !_cashSale) ...[
@@ -651,6 +638,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
             ],
             instSectionTitle(p, Loc.t('2. ITEM', '2۔ سامان')),
             _itemCard(p),
+    ];
+    final rightCol = <Widget>[
             if (_cashSale) ...[
               instSectionTitle(p, Loc.t('3. PRICE', '3۔ قیمت')),
               Container(
@@ -776,6 +765,31 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
               icon: Icons.add_card,
             ),
             ],
+    ];
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Column(children: [
+        instHeader(context, p, _cashSale ? Loc.t('Cash Sale', 'نقد سیل') : Loc.t('New Installment', 'نئی قسط'),
+            Loc.t('Customer → item → plan', 'کسٹمر ← سامان ← پلان')),
+        Expanded(
+          child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(value: false, icon: const Icon(Icons.add_card), label: Text(Loc.t('Installment', 'قسط'))),
+                ButtonSegment(value: true, icon: const Icon(Icons.point_of_sale), label: Text(Loc.t('Cash sale', 'نقد سیل'))),
+              ],
+              selected: {_cashSale},
+              onSelectionChanged: (v) => setState(() => _cashSale = v.first),
+            ),
+            // PC: bayen kaun / kya (customer, zamin, saman), dayen plan + khulasa + button — scroll kam.
+            if (deskTwo)
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: leftCol)),
+                const SizedBox(width: 20),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rightCol)),
+              ])
+            else ...[...leftCol, ...rightCol],
           ]),
         ),
       ]),
