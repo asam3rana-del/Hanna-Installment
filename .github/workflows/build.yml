@@ -334,6 +334,14 @@ jobs:
 
       - run: flutter build windows --release --build-number=${{ github.run_number }} --dart-define=APP_BUILD=${{ github.run_number }} --obfuscate --split-debug-info=build/debug-info-windows
 
+      # Visual C++ runtime DLLs app ke saath — naye PC par "MSVCP140.dll was not found" na aaye.
+      - name: Bundle VC++ runtime DLLs
+        shell: pwsh
+        run: |
+          foreach ($d in 'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll') {
+            Copy-Item -Force "$env:WINDIR\System32\$d" build/windows/x64/runner/Release/
+          }
+
       # Poora Release folder (exe + dll + data) — sirf .exe akeli nahi chalti.
       - name: Zip Release folder
         shell: pwsh
