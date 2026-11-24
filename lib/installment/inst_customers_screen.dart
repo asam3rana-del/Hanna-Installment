@@ -684,8 +684,10 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
         ]),
         const Divider(height: 24),
         instInfoLine(p, Loc.t('Phone', 'فون'), c.phone),
+        // Khata no. hamesha phone ke neeche (khali ho to "—" — Edit se likhein).
+        instInfoLine(p, Loc.t('Khata no.', 'کھاتہ نمبر'),
+            (pr?.khataNo.trim() ?? '').isEmpty ? '—' : pr!.khataNo.trim()),
         if (pr != null) ...[
-          instInfoLine(p, Loc.t('Khata no.', 'کھاتہ نمبر'), pr.khataNo),
           instInfoLine(p, Loc.t('Second phone', 'دوسرا فون'), pr.phone2),
           instInfoLine(p, Loc.t('Address', 'پتہ'), pr.address),
           instInfoLine(p, Loc.t('Job / business', 'روزگار'), pr.occupation),
