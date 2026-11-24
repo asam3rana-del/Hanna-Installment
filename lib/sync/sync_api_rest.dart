@@ -325,11 +325,12 @@ class RestSyncApi implements SyncBackend {
 
     lateFailed = false;
     PullDiagnostics.lateQueryFailed.clear();
-    // Ek ek collection (mobile parallel karta hai): PC par 20+ collections x 2 query ek saath bhejne se
-    // kamzor internet par timeouts aate the; tarteeb se thora dheema magar mustahkam.
+    // 4-4 collections ek saath (sab ek saath = kamzor internet par timeouts; ek ek = 90 sec se zyada).
     final loaded = <MapEntry<String, List<SyncDoc>>>[];
-    for (final c in pullCollections) {
-      loaded.add(await loadSafe(c));
+    const batch = 4;
+    for (var i = 0; i < pullCollections.length; i += batch) {
+      final end = i + batch < pullCollections.length ? i + batch : pullCollections.length;
+      loaded.addAll(await Future.wait([for (final c in pullCollections.sublist(i, end)) loadSafe(c)]));
     }
     if (!lateFailed) PullDiagnostics.lateQueryIssue = '';
     return assemblePullResult(Map.fromEntries(loaded), since);

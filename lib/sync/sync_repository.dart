@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import '../utils/loc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -161,7 +162,8 @@ class SyncRepository {
     final pullStartedAt = nowMs();
     final PullResult changes;
     try {
-      changes = await api.pull(since).timeout(const Duration(seconds: 90));
+      // PC (REST) mein har collection ki alag HTTP query — kamzor internet par zyada waqt; mobile 90 sec.
+      changes = await api.pull(since).timeout(Duration(seconds: Platform.isWindows ? 240 : 90));
     } on BranchNotConfiguredException catch (e) {
       return SyncResult(
           pushedCount: pushed, failedCount: failed, pulledOk: false, error: pushBlocked ?? e.message);

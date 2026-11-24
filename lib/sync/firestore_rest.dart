@@ -238,7 +238,14 @@ class FirestoreRest {
   static const Duration requestTimeout = Duration(seconds: 30);
 
   /// Tests badal sakte hain.
-  HttpClient Function() httpClientFactory = () => HttpClient()..connectionTimeout = const Duration(seconds: 20);
+  HttpClient Function() httpClientFactory = () => HttpClient()
+    ..connectionTimeout = const Duration(seconds: 20)
+    ..idleTimeout = const Duration(seconds: 30)
+    ..maxConnectionsPerHost = 6;
+
+  /// Ek hi client (keep-alive): har request par naya TLS connection bohat dheema tha (pull 90 sec timeout).
+  HttpClient? _client;
+  HttpClient get _http => _client ??= httpClientFactory();
 
   String? _idToken;
   int _idTokenExpiresAt = 0; // ms
@@ -277,7 +284,21 @@ class FirestoreRest {
   }
 
   /// Valid ID token (zaroorat ho to refresh / pehli dafa anonymous sign-up).
-  Future<String> idToken({bool forceRefresh = false}) async {
+  ///
+  /// Ek waqt mein sirf EK sign-in / refresh (lock): pehle Cloud Sync Setup (Device ID) aur sync ek saath
+  /// sign-up karte the — do alag anonymous users ban jate, PC ek ki ID dikhata aur doosre se likhta
+  /// (branch_members mein ID daalne ke baad bhi "permission denied").
+  Future<String> idToken({bool forceRefresh = false}) {
+    final running = _inflight;
+    if (running != null) return running;
+    final f = _idTokenLocked(forceRefresh).whenComplete(() => _inflight = null);
+    _inflight = f;
+    return f;
+  }
+
+  Future<String>? _inflight;
+
+  Future<String> _idTokenLocked(bool forceRefresh) async {
     final c = await _config();
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!forceRefresh && _tokenProject == c.projectId && _idToken != null && now < _idTokenExpiresAt - 60000) {
@@ -377,7 +398,7 @@ class FirestoreRest {
   }
 
   Future<_RawRes> _raw(String method, Uri uri, {String? body, required String contentType, String? token}) async {
-    final client = httpClientFactory();
+    final client = _http;
     try {
       final req = await client.openUrl(method, uri).timeout(requestTimeout);
       req.headers.set(HttpHeaders.acceptHeader, 'application/json');
@@ -392,16 +413,27 @@ class FirestoreRest {
       final text = await res.transform(utf8.decoder).join().timeout(requestTimeout);
       return _RawRes(res.statusCode, text);
     } on TimeoutException {
+      _resetClient();
       throw const RestFirebaseException('deadline-exceeded', 'Request timed out (slow / no internet)');
     } on SocketException catch (e) {
+      _resetClient();
       throw RestFirebaseException('unavailable', 'No internet: ${e.message}');
     } on HandshakeException catch (e) {
+      _resetClient();
       throw RestFirebaseException('unavailable', 'Secure connection failed (check PC date/time): ${e.message}');
     } on HttpException catch (e) {
+      _resetClient();
       throw RestFirebaseException('unavailable', 'Connection error: ${e.message}');
-    } finally {
-      client.close(force: true);
     }
+  }
+
+  /// Network ghalti ke baad purane (shayad toote) connections chhor kar naya client.
+  void _resetClient() {
+    final c = _client;
+    _client = null;
+    try {
+      c?.close(force: true);
+    } catch (_) {}
   }
 
   // -------------------------------------------------------------- firestore
