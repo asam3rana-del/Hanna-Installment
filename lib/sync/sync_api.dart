@@ -13,6 +13,7 @@ import '../utils/loc.dart';
 import 'branch_config_store.dart';
 import 'cloud_config_store.dart';
 import 'device_tag.dart';
+import 'pc_cloud_login.dart';
 import 'sync_apply.dart';
 import 'sync_pull_plan.dart';
 import 'sync_push_plan.dart';
@@ -56,7 +57,7 @@ class SyncApi implements SyncBackend {
   Future<String?> currentUid() async {
     final app = await CloudConfigStore.firebaseApp();
     if (app == null) return null;
-    return FirebaseAuth.instanceFor(app: app).currentUser?.uid;
+    return (await restoredFirebaseUser(FirebaseAuth.instanceFor(app: app)))?.uid;
   }
 
   /// Kotlin `firestoreFor`: branch configure nahi / cloud project nahi / sign-in nahi ho saka => null
@@ -92,6 +93,42 @@ class SyncApi implements SyncBackend {
       }
       return FirebaseFirestore.instanceFor(app: app);
     }
+    // PC: Email / Password wala pakka user (Device ID kabhi nahi badalti) — pc_cloud_login.dart.
+    final pc = await PcCloudLogin.get();
+    if (pc != null) {
+      final u = await restoredFirebaseUser(auth);
+      if (u == null || u.isAnonymous || (u.email ?? '').toLowerCase() != pc.email.toLowerCase()) {
+        try {
+          if (u != null) await auth.signOut();
+          await auth
+              .signInWithEmailAndPassword(email: pc.email, password: pc.password)
+              .timeout(const Duration(seconds: 20));
+        } catch (e) {
+          final code = e is FirebaseException ? e.code : '';
+          if (code == 'operation-not-allowed' || code == 'admin-restricted-operation') {
+            connectIssue = Loc.t(
+              'Email/Password sign-in is OFF in Firebase — Firebase Console > Authentication > Sign-in method > turn on Email/Password.',
+              'Firebase میں Email/Password سائن اِن بند ہے — Firebase Console > Authentication > Sign-in method میں Email/Password آن کریں۔',
+            );
+          } else if (code == 'network-request-failed' || e is TimeoutException || isNetworkError(e)) {
+            connectIssue = Loc.t(
+              'No internet (or too slow) — sync will retry when the connection is back.',
+              'انٹرنیٹ نہیں (یا بہت سست) — کنکشن آنے پر سنک دوبارہ کوشش کرے گا۔',
+            );
+          } else {
+            connectIssue = Loc.t(
+              'PC cloud login failed (${code.isEmpty ? e.toString() : code}) — check the PC email / password in Cloud Sync Setup '
+                  '(the user must exist in Firebase > Authentication > Users).',
+              'پی سی کلاؤڈ لاگ اِن ناکام (${code.isEmpty ? e.toString() : code}) — Cloud Sync Setup میں پی سی ای میل / پاس ورڈ چیک کریں '
+                  '(یوزر Firebase > Authentication > Users میں ہونا چاہیے)۔',
+            );
+          }
+          return null;
+        }
+      }
+      return FirebaseFirestore.instanceFor(app: app);
+    }
+    await restoredFirebaseUser(auth); // desktop: purana login bahal hone do, naya anonymous na banao
     if (auth.currentUser == null) {
       try {
         await auth.signInAnonymously().timeout(const Duration(seconds: 20));
