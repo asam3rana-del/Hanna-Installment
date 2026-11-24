@@ -392,19 +392,28 @@ class InstCustomerRow {
   final String phone;
   final CustomerProfile? profile;
   final int guarantorCount;
+
+  /// Is customer ko qist par diye saman ki pehchan (IMEI / engine no. waghera + brand / model) — search ke liye.
+  final String itemKeys;
   const InstCustomerRow({
     required this.id,
     required this.name,
     required this.phone,
     this.profile,
     this.guarantorCount = 0,
+    this.itemKeys = '',
   });
 
-  /// Naam / walid / phone / CNIC (dash ke baghair bhi) / pata.
+  /// Naam / walid / phone / CNIC (dash ke baghair bhi) / pata / khata no. / qist wale saman ka IMEI.
   bool matches(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return true;
     final p = profile;
+    // IMEI / engine / chassis: kam se kam 4 harf / hindse jo saman ki pehchan mein hon.
+    final qk = q.replaceAll(RegExp(r'[\s-]'), '');
+    if (qk.length >= 4 && itemKeys.isNotEmpty && itemKeys.toLowerCase().replaceAll(RegExp(r'[\s-]'), '').contains(qk)) {
+      return true;
+    }
     final hay = '$name ${p?.fatherName ?? ''} ${p?.address ?? ''} ${p?.khataNo ?? ''}'.toLowerCase();
     if (q.split(RegExp(r'\s+')).every(hay.contains)) return true;
     final k = (p?.khataNo ?? '').trim().toLowerCase();

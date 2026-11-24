@@ -9,6 +9,7 @@ import '../services/session.dart';
 import '../services/whatsapp_sender.dart';
 import '../theme/theme_manager.dart';
 import '../utils/desktop_layout.dart';
+import '../services/payment_info.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
 import 'inst_customers_screen.dart';
@@ -1080,6 +1081,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
       nextDue: later > 0 ? null : next?.dueDate,
       nextAmount: next?.remaining ?? 0,
       kind: pay.kind,
+      payInfo: await PaymentInfo.load(),
     );
   }
 

@@ -289,6 +289,8 @@ class FirestoreRest {
   /// sign-up karte the — do alag anonymous users ban jate, PC ek ki ID dikhata aur doosre se likhta
   /// (branch_members mein ID daalne ke baad bhi "permission denied").
   Future<String> idToken({bool forceRefresh = false}) {
+    // 401 ke baad: purana token yaad se nikal do, taake chalti (ya agli) call naya token laye.
+    if (forceRefresh) _idTokenExpiresAt = 0;
     final running = _inflight;
     if (running != null) return running;
     final f = _idTokenLocked(forceRefresh).whenComplete(() => _inflight = null);

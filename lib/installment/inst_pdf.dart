@@ -167,6 +167,7 @@ class InstPdf {
     await _assets();
     final shop = await loadShopHeader();
     final terms = InstTerms.lines(await InstTerms.load());
+    final payInfo = (await PaymentInfo.load()).trim(); // dukaandar ka Raast / JazzCash / bank (Settings)
     final secs = await InstPlanRepository.instance.securities(v.plan.id);
     final repo = InstRepository.instance;
     final prof = await repo.profile(v.plan.customerId);
@@ -314,6 +315,11 @@ class InstPdf {
                   sc.returned ? '${Loc.t('returned', 'واپس')} ${_d(sc.returnedAt)}' : Loc.t('with shop', 'دکان کے پاس'),
                 ].join('  •  ')),
         ],
+        if (payInfo.isNotEmpty) ...[
+          _section(Loc.t('Pay installments to', 'قسط کی ادائیگی یہاں کریں')),
+          for (final l in payInfo.split('\n'))
+            if (l.trim().isNotEmpty) _t(l.trim(), size: 10.5, bold: true),
+        ],
         if (terms.isNotEmpty) ...[
           _section(Loc.t('Terms / agreement', 'شرائط / اقرار نامہ')),
           for (final line in terms) pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 1.5), child: _t(line, size: 9.5)),
@@ -419,13 +425,13 @@ class InstPdf {
               padding: const pw.EdgeInsets.only(top: 6),
               child: _t('Late amount: ${_rs(v.status.overdue)}', size: 10, bold: true, argb: 0xFFD64545),
             ),
-          if (payInfo.isNotEmpty && remainingAfter > 0.5)
+          if (payInfo.isNotEmpty)
             pw.Container(
               margin: const pw.EdgeInsets.only(top: 10),
               padding: const pw.EdgeInsets.all(8),
               decoration: pw.BoxDecoration(border: pw.Border.all(color: _teal, width: 0.8), borderRadius: pw.BorderRadius.circular(6)),
               child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                _t('Pay next installment to:', size: 10, bold: true, argb: 0xFF0F9B8E),
+                _t(remainingAfter > 0.5 ? 'Pay next installment to:' : 'Payment details:', size: 10, bold: true, argb: 0xFF0F9B8E),
                 for (final l in payInfo.split('\n'))
                   if (l.trim().isNotEmpty) _t(l.trim(), size: 10),
               ]),

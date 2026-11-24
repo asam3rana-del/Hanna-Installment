@@ -37,7 +37,9 @@ class InstRepository {
       SELECT c.id AS id, c.name AS name, c.phone AS phone,
              p.customerId AS pCustomerId, p.fatherName, p.cnic, p.phone2, p.address, p.occupation,
              p.workAddress, p.monthlyIncome, p.note, p.createdAt, p.updatedAt, p.khataNo, p.blockedReason, p.blockedAt,
-             (SELECT COUNT(*) FROM inst_guarantors g WHERE g.customerId = c.id) AS gCount
+             (SELECT COUNT(*) FROM inst_guarantors g WHERE g.customerId = c.id) AS gCount,
+             (SELECT GROUP_CONCAT(i.idValues || ' ' || i.brand || ' ' || i.model, ' ')
+                FROM inst_plans pl JOIN inst_items i ON i.id = pl.itemId WHERE pl.customerId = c.id) AS itemKeys
       FROM customers c
       LEFT JOIN customer_profiles p ON p.customerId = c.id
       WHERE c.kind = '' OR c.kind IS NULL
@@ -51,6 +53,7 @@ class InstRepository {
           phone: (r['phone'] as String?) ?? '',
           profile: r['pCustomerId'] == null ? null : CustomerProfile.fromMap({...r, 'customerId': r['pCustomerId']}),
           guarantorCount: ((r['gCount'] as num?) ?? 0).toInt(),
+          itemKeys: (r['itemKeys'] as String?) ?? '',
         )
     ];
   }
@@ -132,6 +135,8 @@ class InstRepository {
       workAddress: p.workAddress.trim(),
       monthlyIncome: p.monthlyIncome < 0 ? 0 : p.monthlyIncome,
       note: p.note.trim(),
+      // FIX: khata no. yahan chhoot raha tha — form mein likhne ke baad bhi save khali hota tha.
+      khataNo: p.khataNo.trim(),
       createdAt: old?.createdAt ?? now,
       updatedAt: now,
     ).toMap();

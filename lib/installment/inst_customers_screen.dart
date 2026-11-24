@@ -668,6 +668,14 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(c.name, style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold, fontSize: 18)),
+              if (pr != null && pr.khataNo.trim().isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 2, bottom: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: p.teal.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+                  child: Text('${Loc.t('Khata no.', 'کھاتہ نمبر')} ${pr.khataNo.trim()}',
+                      style: TextStyle(color: p.teal, fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
               if (pr != null && pr.cnic.isNotEmpty)
                 Text(pr.cnic, style: TextStyle(color: p.textMuted, fontSize: 13, letterSpacing: 0.5)),
               Text(Loc.t('Tap photo to change', 'تصویر بدلنے کے لیے دبائیں'), style: TextStyle(color: p.textMuted, fontSize: 10.5)),
@@ -1050,3 +1058,4 @@ Future<bool> instRiskCheck(BuildContext context, int customerId, {List<int> guar
   );
   return go == true;
 }
+

@@ -81,7 +81,7 @@ class _InstHomeSearchState extends State<InstHomeSearch> {
       TextField(
         controller: _q,
         textInputAction: TextInputAction.search,
-        decoration: instDeco(p, Loc.t('Search customer or item: name, CNIC, phone, model, IMEI', 'تلاش: کسٹمر یا سامان — نام، شناختی کارڈ، فون، ماڈل، IMEI'),
+        decoration: instDeco(p, Loc.t('Search: name, phone, CNIC, khata no., IMEI, model', 'تلاش: نام، فون، شناختی کارڈ، کھاتہ نمبر، IMEI، ماڈل'),
             suffix: q.isEmpty
                 ? const Icon(Icons.search)
                 : IconButton(

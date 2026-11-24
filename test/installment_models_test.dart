@@ -104,5 +104,19 @@ void main() {
       expect(row.matches('usman'), isFalse);
       expect(row.matches('12'), isFalse);
     });
-  });
+  
+    test('customer search also finds by sold item IMEI and khata no.', () {
+      const row = InstCustomerRow(
+        id: 7,
+        name: 'Bilal',
+        phone: '0300-1112223',
+        profile: CustomerProfile(customerId: 7, khataNo: 'K-45'),
+        itemKeys: '{"IMEI 1":"356789012345678"} Samsung A15',
+      );
+      expect(row.matches('356789012345678'), isTrue);
+      expect(row.matches('3567 8901'), isTrue);
+      expect(row.matches('k-45'), isTrue);
+      expect(row.matches('999999999'), isFalse);
+    });
+});
 }

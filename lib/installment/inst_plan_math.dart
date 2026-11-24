@@ -338,6 +338,7 @@ String receiptText({
   required int? nextDue,
   required double nextAmount,
   String kind = payInstallment,
+  String payInfo = '',
 }) {
   String d(int ms) {
     final t = DateTime.fromMillisecondsSinceEpoch(ms);
@@ -359,6 +360,15 @@ String receiptText({
   b.writeln('Remaining: ${rs(remaining)}');
   if (nextDue != null && remaining > 0.5) b.writeln('Next installment: ${rs(nextAmount)} on ${d(nextDue)}');
   if (remaining <= 0.5) b.writeln('Plan complete. Thank you!');
+  // Dukaandar ka apna Raast / JazzCash / bank (Settings) — khali ho to kuch nahi.
+  final pay = payInfo.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+  if (pay.isNotEmpty) {
+    b.writeln('------------------------');
+    b.writeln(remaining > 0.5 ? 'Pay installments to:' : 'Payment details:');
+    for (final l in pay) {
+      b.writeln(l);
+    }
+  }
   b
     ..writeln('------------------------')
     ..write(shopName.trim().isEmpty ? 'Thank you!' : 'Thank you — ${shopName.trim()}');
