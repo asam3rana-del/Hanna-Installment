@@ -436,118 +436,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _open(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
-  /// Kotlin SettingsActivity ke upar wali link rows — role gates Dashboard ke barabar.
-  /// Ek hi list: mobile par MenuRow (pehle jaisa), PC par barabar size ki tiles ka grid.
-  List<_SettingsLink> _links() {
+  /// Kotlin SettingsActivity ke upar wali link rows (Parties, Items, Reports, Sale, Purchase, Expense,
+  /// Cash & Bank, Shell Ledger) — usi tarteeb mein; role gates Dashboard ke barabar.
+  List<Widget> _linkRows() {
     final p = ThemeManager.palette;
+    Widget row(IconData icon, String en, String ur, Widget screen, {Color? color}) => MenuRow(
+          icon: icon,
+          label: Loc.t(en, ur),
+          iconColor: color ?? p.teal,
+          chevronIcon: Icons.chevron_right,
+          showChevron: true,
+          onTap: () => _open(screen),
+        );
     return [
-      // Hanna Installment: Parties / Items / Sale / Purchase / Shell Ledger (grocery POS) hata diye.
-      // Step 32: Reports dashboard se yahan (Admin / Manager).
-      if (Session.isAdminOrManager)
-        _SettingsLink(Icons.insights_outlined, Loc.t('Reports', 'رپورٹس'), const InstReportsHubScreen(), p.navyInk,
-            sub: Loc.t('Profit, sale, purchase, returns, stock, dues', 'منافع، سیل، خریداری، واپسی، اسٹاک، قسطیں')),
-      _SettingsLink(Icons.verified_user_outlined, Loc.t('License', 'لائسنس'), const LicenseScreen(), p.teal),
+      // Hanna Installment: Parties / Items / Reports / Sale / Purchase / Shell Ledger (grocery POS) hata diye.
+      row(Icons.verified_user_outlined, 'License', 'لائسنس', const LicenseScreen()),
       if (Permissions.can('expense'))
-        _SettingsLink(Icons.business_center_outlined, Loc.t('Expense', 'اخراجات'),
-            const PermissionGuard(permission: 'expense', child: ExpenseScreen()), p.navyInk),
+        row(Icons.business_center_outlined, 'Expense', 'اخراجات',
+            const PermissionGuard(permission: 'expense', child: ExpenseScreen()), color: p.navyInk),
       if (Session.isAdminOrManager)
-        _SettingsLink(Icons.storefront_outlined, Loc.t('Shop Rents', 'دکانوں کا کرایہ'),
-            const RoleGuard(allowed: {'admin', 'manager'}, child: ShopRentScreen()), p.navyInk),
+        row(Icons.storefront_outlined, 'Shop Rents', 'دکانوں کا کرایہ',
+            const RoleGuard(allowed: {'admin', 'manager'}, child: ShopRentScreen()), color: p.navyInk),
       if (Session.isAdminOrManager)
-        _SettingsLink(Icons.badge_outlined, Loc.t('Workers', 'ورکرز'),
-            const RoleGuard(allowed: {'admin', 'manager'}, child: WorkersScreen()), p.navyInk),
+        row(Icons.badge_outlined, 'Workers', 'ورکرز',
+            const RoleGuard(allowed: {'admin', 'manager'}, child: WorkersScreen()), color: p.navyInk),
       if (Session.isAdminOrManager)
-        _SettingsLink(Icons.receipt_long_outlined, Loc.t('Utility Bills', 'یوٹیلیٹی بلز'),
-            const RoleGuard(allowed: {'admin', 'manager'}, child: UtilityBillsScreen()), p.navyInk),
+        row(Icons.receipt_long_outlined, 'Utility Bills', 'یوٹیلیٹی بلز',
+            const RoleGuard(allowed: {'admin', 'manager'}, child: UtilityBillsScreen()), color: p.navyInk),
       if (Permissions.can('cash_register'))
-        _SettingsLink(Icons.account_balance_outlined, Loc.t('Cash & Bank', 'کیش اور بینک'),
-            const PermissionGuard(permission: 'cash_register', child: CashScreen()), p.navyInk),
+        row(Icons.account_balance_outlined, 'Cash & Bank', 'کیش اور بینک',
+            const PermissionGuard(permission: 'cash_register', child: CashScreen()), color: p.navyInk),
       // Hanna Installment: Zakat hata diya (user ki darkhwast, 2026-11-14). Table / sync wahi (purana data mehfooz).
     ];
   }
 
-  /// Mobile: pehle wali shakal (Reports ListTile card, baqi MenuRow).
-  Widget _mobileLink(_SettingsLink l) {
-    if (l.sub != null) {
-      return Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: ListTile(
-          leading: Icon(l.icon, color: l.color),
-          title: Text(l.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(l.sub!),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _open(l.screen),
-        ),
-      );
-    }
-    return MenuRow(
-      icon: l.icon,
-      label: l.label,
-      iconColor: l.color,
-      chevronIcon: Icons.chevron_right,
-      showChevron: true,
-      onTap: () => _open(l.screen),
-    );
-  }
-
-  /// PC: barabar unchai (72 px) ki tile — grid mein seedhi lines banti hain.
-  Widget _deskLinkTile(_SettingsLink l) {
-    final p = ThemeManager.palette;
-    return Material(
-      color: p.cardWhite,
-      elevation: 1,
-      shadowColor: Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: p.border)),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _open(l.screen),
-        child: SizedBox(
-          height: 72,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Row(children: [
-              IconBadge(icon: l.icon, color: l.color, size: 42, iconSize: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(l.label,
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  if (l.sub != null)
-                    Text(l.sub!,
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: p.textMuted)),
-                ]),
-              ),
-              Icon(Icons.chevron_right, color: p.textMuted),
-            ]),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _deskLinkGrid(List<_SettingsLink> links) => LayoutBuilder(builder: (context, c) {
-        const gap = 12.0;
-        final cols = c.maxWidth >= 960 ? 4 : 3;
-        final w = ((c.maxWidth - gap * (cols - 1)) / cols).floorToDouble();
-        return Wrap(spacing: gap, runSpacing: gap, children: [
-          for (final l in links) SizedBox(width: w, child: _deskLinkTile(l)),
-        ]);
-      });
-
-  Widget _sectionLabel(String text) => Padding(
-        padding: const EdgeInsetsDirectional.only(start: 4, bottom: 10),
-        child: Text(text.toUpperCase(),
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: ThemeManager.palette.textMuted)),
-      );
-
   @override
   Widget build(BuildContext context) {
     final admin = Session.isAdmin;
-    // PC (chauri window): shortcuts ka grid + do saaf columns. Mobile: pehle wali ek lambi list.
-    final desk = isDesktopWide(context);
-    final links = _links();
-    // Dukaan, login aur printer.
-    final shopCards = <Widget>[
+    return Scaffold(
+      backgroundColor: ThemeManager.palette.bg,
+      appBar: AppBar(backgroundColor: ThemeManager.palette.navy, foregroundColor: Colors.white, title: Text(Loc.t('Settings', 'سیٹنگز'))),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        PremiumHeader(title: _headerShop, subtitle: Loc.t('INSTALLMENT SHOP', 'قسط کی دکان')),
+        // PC: cards do columns mein (deskTwoCols); mobile par pehle jaisa.
+        ...deskTwoCols(context, [
+        // Step 32: Reports dashboard se yahan (Admin / Manager).
+        if (Session.isAdminOrManager)
+          Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              leading: Icon(Icons.insights_outlined, color: ThemeManager.palette.navyInk),
+              title: Text(Loc.t('Reports', 'رپورٹس'), style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(Loc.t('Profit, sale, purchase, returns, stock, dues', 'منافع، سیل، خریداری، واپسی، اسٹاک، قسطیں')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InstReportsHubScreen())),
+            ),
+          ),
+        ..._linkRows(),
+        const SizedBox(height: 6),
         if (admin)
           _card(Loc.t('Shop Information', 'دکان کی معلومات'), Icons.store, [
             // Dukaan ka logo: receipt / plan PDF / reports ke upar (app ka naam / logo nahi).
@@ -766,9 +712,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ]),
-    ];
-    // Backup, sync, theme, zabaan, users wagaira.
-    final appCards = <Widget>[
         // Kotlin Settings mein Backup/Export row (BackupExportScreen ka apna RoleGuard admin/manager).
         if (Session.isAdminOrManager)
           _card(Loc.t('Backup & Export', 'بیک اپ اور ایکسپورٹ'), Icons.save_outlined, [
@@ -839,62 +782,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : Loc.t('OPEN DEMO SHOP', 'ڈیمو دکان کھولیں')),
             ),
           ]),
-    ];
-    final logout = OutlinedButton.icon(
-      onPressed: _logout,
-      icon: Icon(Icons.logout, color: ThemeManager.palette.red),
-      label: Text(Loc.t('Logout', 'لاگ آؤٹ'), style: TextStyle(color: ThemeManager.palette.red)),
-    );
-    return Scaffold(
-      backgroundColor: ThemeManager.palette.bg,
-      appBar: AppBar(backgroundColor: ThemeManager.palette.navy, foregroundColor: Colors.white, title: Text(Loc.t('Settings', 'سیٹنگز'))),
-      body: ListView(
-        // PC: scrollbar ke liye end side par thori jagah, taake cards ke upar na aaye.
-        padding: desk ? const EdgeInsetsDirectional.fromSTEB(20, 16, 30, 28) : const EdgeInsets.all(16),
-        children: [
-          PremiumHeader(title: _headerShop, subtitle: Loc.t('INSTALLMENT SHOP', 'قسط کی دکان')),
-          if (desk) ...[
-            if (links.isNotEmpty) ...[
-              _sectionLabel(Loc.t('Shortcuts', 'شارٹ کٹس')),
-              _deskLinkGrid(links),
-              const SizedBox(height: 24),
-            ],
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  _sectionLabel(Loc.t('Shop & Security', 'دکان اور سیکیورٹی')),
-                  ...shopCards,
-                ]),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  _sectionLabel(Loc.t('Data & App', 'ڈیٹا اور ایپ')),
-                  ...appCards,
-                ]),
-              ),
-            ]),
-            const SizedBox(height: 6),
-            Align(alignment: AlignmentDirectional.centerEnd, child: SizedBox(width: 220, child: logout)),
-          ] else ...[
-            for (final l in links) _mobileLink(l),
-            const SizedBox(height: 6),
-            ...shopCards,
-            ...appCards,
-            logout,
-          ],
-        ],
-      ),
+        ]),
+        OutlinedButton.icon(
+          onPressed: _logout,
+          icon: Icon(Icons.logout, color: ThemeManager.palette.red),
+          label: Text(Loc.t('Logout', 'لاگ آؤٹ'), style: TextStyle(color: ThemeManager.palette.red)),
+        ),
+      ]),
     );
   }
-}
-
-/// Settings ki ek link (Reports, License, Expense...).
-class _SettingsLink {
-  final IconData icon;
-  final String label;
-  final String? sub;
-  final Widget screen;
-  final Color color;
-  const _SettingsLink(this.icon, this.label, this.screen, this.color, {this.sub});
 }

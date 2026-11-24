@@ -246,35 +246,13 @@ class _BottomSystemBarGuard extends StatelessWidget {
 class _DesktopScrollBehavior extends MaterialScrollBehavior {
   const _DesktopScrollBehavior();
 
-  /// PC: mouse se khench kar scroll band — text select karte / button dabate waqt page khisak jata tha.
-  /// Scroll ab mouse wheel, touchpad aur scrollbar (pakar kar khenchein) se. Touch-screen PC par ungli se drag chalta hai.
-  /// Phone / tablet par mouse drag pehle ki tarah chalu.
   @override
   Set<PointerDeviceKind> get dragDevices => {
         PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
         PointerDeviceKind.stylus,
-        PointerDeviceKind.invertedStylus,
         PointerDeviceKind.trackpad,
-        PointerDeviceKind.unknown,
-        if (!_isDesktop) PointerDeviceKind.mouse,
       };
-
-  /// PC: lambi screens par scrollbar hamesha nazar aaye (pehle sirf mouse upar lane par patla sa aata tha),
-  /// chaura ho aur mouse se pakar kar khencha ja sake. Sirf upar-neeche wali lists; horizontal pehle jaisi.
-  @override
-  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
-    if (!_isDesktop || axisDirectionToAxis(details.direction) != Axis.vertical) {
-      return super.buildScrollbar(context, child, details);
-    }
-    return Scrollbar(
-      controller: details.controller,
-      thumbVisibility: true,
-      interactive: true,
-      thickness: 10,
-      radius: const Radius.circular(8),
-      child: child,
-    );
-  }
 }
 
 

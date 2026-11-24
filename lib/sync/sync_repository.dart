@@ -29,7 +29,7 @@ class SyncRepository {
 
   /// "Cloud set up hai?" — default: custom config ya build ka default Firebase app. Tests badalte hain.
   static Future<bool> Function() isCloudReady =
-      () async => (await CloudConfigStore.firebaseApp()) != null;
+      CloudConfigStore.cloudReady;
 
   /// Pull ke baad ka safai kaam (Kotlin `SyncQueueHelper.mergeOwnDuplicateExpenses(db)`); SyncQueueHelper
   /// port hone par yahan jurega. Kabhi sync nahi rokta — throw bhi kare to nazar-andaz.

@@ -5,7 +5,6 @@ import '../services/demo_mode.dart';
 import '../services/session.dart';
 import '../sync/branch_config_store.dart';
 import '../sync/cloud_config_store.dart';
-import '../sync/pc_cloud_login.dart';
 import '../sync/settings_sync.dart';
 import '../sync/sync_worker.dart';
 import '../utils/loc.dart';
@@ -544,8 +543,6 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
   final _appId = TextEditingController();
   final _bucket = TextEditingController();
   final _branch = TextEditingController();
-  final _pcEmail = TextEditingController(); // sirf PC: pakki Device ID ke liye Firebase Email/Password user
-  final _pcPassword = TextEditingController();
   bool _hasExisting = false;
   bool _loaded = false;
   String? _uid;
@@ -559,7 +556,7 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
 
   @override
   void dispose() {
-    for (final c in [_projectId, _apiKey, _appId, _bucket, _branch, _pcEmail, _pcPassword]) {
+    for (final c in [_projectId, _apiKey, _appId, _bucket, _branch]) {
       c.dispose();
     }
     super.dispose();
@@ -586,10 +583,7 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
   Future<void> _load() async {
     final existing = await CloudConfigStore.get();
     final uid = await SettingsSync.deviceId();
-    final pc = await PcCloudLogin.get();
     if (!mounted) return;
-    _pcEmail.text = pc?.email ?? '';
-    _pcPassword.text = pc?.password ?? '';
     setState(() {
       _hasExisting = existing != null;
       _projectId.text = existing?.projectId ?? '';
@@ -643,13 +637,6 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
       _toast(err, long: true);
       return;
     }
-    final pcEmail = _pcEmail.text.trim();
-    final pcPassword = _pcPassword.text;
-    if (PcCloudLogin.supported && (pcEmail.isEmpty != pcPassword.isEmpty)) {
-      _toast(Loc.t('PC login: fill both email and password (or leave both empty)', 'پی سی لاگ اِن: ای میل اور پاس ورڈ دونوں لکھیں (یا دونوں خالی چھوڑیں)'),
-          long: true);
-      return;
-    }
     setState(() => _busy = true);
     try {
       final oldBranch = BranchConfigStore.current;
@@ -676,13 +663,6 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
       }
       await SettingsSync.saveCloudSetup(
           projectId: projectId, apiKey: apiKey, appId: appId, storageBucket: bucket, branchId: branch);
-      if (PcCloudLogin.supported) {
-        if (pcEmail.isEmpty) {
-          await PcCloudLogin.clear();
-        } else {
-          await PcCloudLogin.save(pcEmail, pcPassword);
-        }
-      }
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -698,7 +678,6 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
     try {
       Future<void> doIt() async {
         await SettingsSync.disconnect();
-        await PcCloudLogin.clear();
         if (!mounted) return;
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -726,12 +705,11 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
     }
   }
 
-  Widget _field(String label, TextEditingController c, {bool obscure = false}) => Padding(
+  Widget _field(String label, TextEditingController c) => Padding(
         padding: const EdgeInsets.only(top: 12),
         child: TextField(
           controller: c,
           maxLines: 1,
-          obscureText: obscure,
           decoration: InputDecoration(labelText: label, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
         ),
       );
@@ -781,20 +759,6 @@ class _CloudSyncSetupDialogState extends State<CloudSyncSetupDialog> {
                     style: TextStyle(fontSize: 11.5, color: ThemeManager.palette.textMuted),
                   ),
                   _field('Branch Code', _branch),
-                  if (PcCloudLogin.supported) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      Loc.t(
-                        'PC login (recommended on PC, keeps the Device ID fixed): Firebase Console > Authentication > Sign-in method > '
-                            'turn on Email/Password, then Users > Add user. Enter that email and password here. Empty = old way.',
-                        'پی سی لاگ اِن (پی سی پر ضروری، ڈیوائس آئی ڈی نہیں بدلے گی): Firebase Console > Authentication > Sign-in method میں '
-                            'Email/Password آن کریں، پھر Users > Add user۔ وہی ای میل اور پاس ورڈ یہاں لکھیں۔ خالی = پرانا طریقہ۔',
-                      ),
-                      style: TextStyle(fontSize: 11.5, color: ThemeManager.palette.textMuted),
-                    ),
-                    _field(Loc.t('PC login email', 'پی سی لاگ اِن ای میل'), _pcEmail),
-                    _field(Loc.t('PC login password', 'پی سی لاگ اِن پاس ورڈ'), _pcPassword, obscure: true),
-                  ],
                   const SizedBox(height: 14),
                   Text(
                     Loc.t('Device ID (share with admin so this device can be approved for branch access)',
