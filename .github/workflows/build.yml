@@ -351,3 +351,25 @@ jobs:
         with:
           name: windows-build
           path: Hanna-Installment-windows.zip
+
+      # Setup installer (Inno Setup): "Next -> Install", Start menu + Desktop shortcut, app ke andar se auto-update.
+      - name: Build Windows Setup (.exe)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          $src = (Resolve-Path build/windows/x64/runner/Release).Path
+          & $iscc "/DAppVersion=1.0.${{ github.run_number }}" "/DSourceDir=$src" windows_installer/hanna_installment.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-FileHash installer-out/Hanna-Installment-Setup.exe -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLower() } | Set-Content installer-out/sha256.txt
+          Get-Content installer-out/sha256.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: |
+            installer-out/Hanna-Installment-Setup.exe
+            installer-out/sha256.txt
