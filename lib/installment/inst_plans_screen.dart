@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/party_photo_store.dart';
+import '../services/printer_service.dart';
 import '../services/session.dart';
 import '../services/whatsapp_sender.dart';
 import '../theme/theme_manager.dart';
@@ -12,6 +14,7 @@ import '../utils/desktop_layout.dart';
 import '../services/payment_info.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
+import 'inst_exports.dart';
 import 'inst_customers_screen.dart';
 import 'inst_items_screen.dart';
 import 'inst_models.dart';
@@ -218,7 +221,13 @@ class _InstPlansScreenState extends State<InstPlansScreen> {
         label: Text(Loc.t('New Installment', 'نئی قسط')),
       ),
       body: Column(children: [
-        instHeader(context, p, Loc.t('Installments', 'قسطیں'), Loc.t('${_all.length} plans', '${_all.length} پلان')),
+        instHeader(context, p, Loc.t('Installments', 'قسطیں'), Loc.t('${_all.length} plans', '${_all.length} پلان'), actions: [
+            IconButton(
+              tooltip: Loc.t('Excel / PDF', 'ایکسل / PDF'),
+              icon: const Icon(Icons.table_chart_outlined, color: Colors.white),
+              onPressed: list.isEmpty ? null : () => exportPlans(context, base: 'Installments', title: Loc.t('Installments', 'قسطیں'), plans: list),
+            ),
+        ]),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
           child: TextField(
@@ -265,7 +274,7 @@ class _InstPlansScreenState extends State<InstPlansScreen> {
                     )
                   : RefreshIndicator(
                       onRefresh: _reload,
-                      child: ListView.builder(
+                      child: DeskListView(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                         itemCount: list.length,
                         itemBuilder: (_, i) => PlanTile(view: list[i], onTap: () => _open(list[i])),
@@ -1107,10 +1116,38 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
             title: Text(Loc.t('Text message', 'سادہ میسج')),
             onTap: () => Navigator.pop(ctx, 'text'),
           ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.print_outlined),
+            title: Text(Loc.t('Print — receipt printer (thermal)', 'پرنٹ — رسید پرنٹر (تھرمل)')),
+            subtitle: Text(Loc.t('Bluetooth / USB / network printer from Settings', 'Settings میں چنا ہوا بلوٹوتھ / USB / نیٹ ورک پرنٹر')),
+            onTap: () => Navigator.pop(ctx, 'thermal'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.local_printshop_outlined),
+            title: Text(Loc.t('Print — normal / Windows printer (PDF)', 'پرنٹ — عام / کمپیوٹر پرنٹر (PDF)')),
+            onTap: () => Navigator.pop(ctx, 'printpdf'),
+          ),
         ]),
       ),
     );
     if (choice == null || !mounted) return;
+    if (choice == 'thermal') {
+      final err = await PrinterService.instance.printText(await _receipt(v, pay));
+      if (mounted) instToast(context, err ?? Loc.t('Sent to printer', 'پرنٹر کو بھیج دیا'));
+      return;
+    }
+    if (choice == 'printpdf') {
+      try {
+        await Printing.layoutPdf(
+          name: 'Receipt ${v.plan.planNo}',
+          onLayout: (_) => InstPdf.receiptBytes(v, pay, remainingAfter: _remainingAfter(v, pay)),
+        );
+      } catch (e) {
+        if (mounted) instToast(context, instErr(e));
+      }
+      return;
+    }
     if (choice == 'pdf') {
       await InstPdf.sendReceipt(context, v, pay, remainingAfter: _remainingAfter(v, pay));
       return;
@@ -1118,6 +1155,15 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
     final text = await _receipt(v, pay);
     if (!mounted) return;
     await sendOnWhatsApp(context, phone: v.customerPhone, text: text);
+  }
+
+  /// A4 par plan ka poora kagaz (customer, zamin, saman, schedule, wasooliyan, shartein, dastakhat) — seedha printer.
+  Future<void> _printStatement(PlanView v) async {
+    try {
+      await Printing.layoutPdf(name: 'Plan ${v.plan.planNo} - ${v.customerName}', onLayout: (_) => InstPdf.statementBytes(v));
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
   }
 
   Future<void> _remind(PlanView v) => remindPlan(context, v);
@@ -1152,8 +1198,8 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Close', 'بند'))),
             FilledButton.icon(
               onPressed: () => Navigator.pop(ctx, true),
-              icon: const Icon(Icons.send),
-              label: Text(Loc.t('WhatsApp receipt', 'واٹس ایپ رسید')),
+              icon: const Icon(Icons.receipt_outlined),
+              label: Text(Loc.t('Receipt — send / print', 'رسید — بھیجیں / پرنٹ')),
             ),
           ],
         ),
@@ -1275,6 +1321,11 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
                   tooltip: Loc.t('PDF statement', 'PDF اسٹیٹمنٹ'),
                   icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white),
                   onPressed: () => InstPdf.sendStatement(context, v)),
+            if (v != null)
+              IconButton(
+                  tooltip: Loc.t('Print agreement / statement (A4)', 'اقرار نامہ / اسٹیٹمنٹ پرنٹ (A4)'),
+                  icon: const Icon(Icons.print_outlined, color: Colors.white),
+                  onPressed: () => _printStatement(v)),
             if (v != null && (Session.isAdminOrManager))
               PopupMenuButton<String>(
                 iconColor: Colors.white,
@@ -1296,18 +1347,23 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
                   : RefreshIndicator(
                       onRefresh: _reload,
                       child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), children: [
-                        _people(p, v),
-                        const SizedBox(height: 12),
-                        _totals(p, v),
-                        instSectionTitle(p, Loc.t('SCHEDULE', 'قسطوں کا شیڈول')),
-                        Container(
-                          decoration: instCard(p),
-                          child: Column(children: [for (final l in v.status.lines) _line(p, l, v)]),
-                        ),
-                        instSectionTitle(p, Loc.t('PAYMENTS', 'وصولیاں')),
-                        if (v.payments.isEmpty)
-                          Text(Loc.t('No payment yet.', 'ابھی کوئی وصولی نہیں۔'), style: TextStyle(color: p.textMuted)),
-                        for (final pay in v.payments) _payment(p, v, pay),
+                        // PC: bayen customer + hisaab + wasooliyan, dayen qiston ka schedule.
+                        ...deskSplit(context, [
+                          _people(p, v),
+                          const SizedBox(height: 12),
+                          _totals(p, v),
+                        ], [
+                          instSectionTitle(p, Loc.t('SCHEDULE', 'قسطوں کا شیڈول')),
+                          Container(
+                            decoration: instCard(p),
+                            child: Column(children: [for (final l in v.status.lines) _line(p, l, v)]),
+                          ),
+                        ], leftTail: [
+                          instSectionTitle(p, Loc.t('PAYMENTS', 'وصولیاں')),
+                          if (v.payments.isEmpty)
+                            Text(Loc.t('No payment yet.', 'ابھی کوئی وصولی نہیں۔'), style: TextStyle(color: p.textMuted)),
+                          for (final pay in v.payments) _payment(p, v, pay),
+                        ]),
                         PlanSecuritiesSection(key: ValueKey('sec-${v.plan.id}-${v.plan.status}'), planId: v.plan.id, planActive: v.plan.isActive),
                         if (v.plan.note.isNotEmpty) ...[
                           instSectionTitle(p, Loc.t('NOTE', 'نوٹ')),
@@ -1569,8 +1625,8 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
             ]),
           ),
           IconButton(
-            tooltip: Loc.t('WhatsApp receipt', 'واٹس ایپ رسید'),
-            icon: Icon(Icons.send_outlined, color: p.teal),
+            tooltip: Loc.t('Receipt — WhatsApp / print', 'رسید — واٹس ایپ / پرنٹ'),
+            icon: Icon(Icons.receipt_outlined, color: p.teal),
             onPressed: () => _sendReceipt(v, pay),
           ),
           if (Session.isAdminOrManager && pay.kind != payAdvance)

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import 'inst_items_screen.dart';
 import 'inst_models.dart';
@@ -144,7 +145,7 @@ class _InstPurchasesScreenState extends State<InstPurchasesScreen> {
                         ),
                       ),
                     )
-                  : ListView.builder(
+                  : DeskListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                       itemCount: list.length,
                       itemBuilder: (_, i) => _billTile(p, list[i]),
@@ -898,7 +899,7 @@ class _InstSuppliersScreenState extends State<InstSuppliersScreen> {
                         style: TextStyle(color: p.textMuted),
                       ),
                     )
-                  : ListView.builder(
+                  : DeskListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                       itemCount: list.length,
                       itemBuilder: (_, i) {

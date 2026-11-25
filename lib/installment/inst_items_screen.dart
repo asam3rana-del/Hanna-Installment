@@ -6,7 +6,9 @@ import 'package:intl/intl.dart';
 
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
+import 'inst_exports.dart';
 import 'inst_cash_sale_repository.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_models.dart';
@@ -100,6 +102,11 @@ class _InstItemsScreenState extends State<InstItemsScreen> {
       body: Column(children: [
         instHeader(context, p, Loc.t('Stock', 'اسٹاک'), Loc.t('Every piece with its IMEI / serial', 'ہر پیس اپنے IMEI / سیریل کے ساتھ'),
             actions: [
+              IconButton(
+              tooltip: Loc.t('Excel / PDF', 'ایکسل / PDF'),
+              icon: const Icon(Icons.table_chart_outlined, color: Colors.white),
+              onPressed: list.isEmpty ? null : () => exportItems(context, list, catName, showCost: showCost),
+            ),
               if (Session.isAdminOrManager)
                 IconButton(
                   tooltip: Loc.t('Change rates', 'ریٹ بدلیں'),
@@ -169,7 +176,7 @@ class _InstItemsScreenState extends State<InstItemsScreen> {
                             style: TextStyle(color: p.textMuted)),
                       ),
                     )
-                  : ListView.builder(
+                  : DeskListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                       itemCount: list.length,
                       itemBuilder: (_, i) => _tile(p, list[i], catName[list[i].categoryId] ?? '', showCost),

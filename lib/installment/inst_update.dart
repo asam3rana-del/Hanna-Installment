@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -31,7 +33,13 @@ class UpdateInfo {
 
   /// Is build se purani app ko update lazmi.
   final int minBuild;
-  const UpdateInfo({required this.version, required this.build, required this.url, this.notes = '', this.minBuild = 0});
+
+  /// (Ikhtiyari) file ka SHA-256 — PC installer download ke baad milaya jata hai.
+  final String sha256;
+  const UpdateInfo({required this.version, required this.build, required this.url, this.notes = '', this.minBuild = 0, this.sha256 = ''});
+
+  /// PC: link Setup (.exe) ka hai to app khud download karke chala sakti hai.
+  bool get isWindowsInstaller => url.toLowerCase().split('?').first.endsWith('.exe');
 
   bool newerThan(int current) => build > current;
   bool requiredFor(int current) => current < minBuild && build > current;
@@ -54,6 +62,7 @@ UpdateInfo? parseUpdateInfo(String body, String platform) {
       url: url,
       notes: '${m['notes'] ?? ''}',
       minBuild: minBuild is num ? minBuild.toInt() : 0,
+      sha256: '${m['sha256'] ?? ''}'.trim().toLowerCase(),
     );
   } catch (_) {
     return null;
@@ -168,6 +177,12 @@ class InstUpdate {
                 icon: const Icon(Icons.download),
                 label: Text(Loc.t('Download', 'ڈاؤن لوڈ')),
                 onPressed: () async {
+                  if (!kIsWeb && Platform.isWindows && info.isWindowsInstaller) {
+                    // PC: Setup khud download + chala do (purani app band, nayi lag kar khud khulti hai; data wahi).
+                    Navigator.pop(ctx);
+                    await _installWindows(context, info);
+                    return;
+                  }
                   final ok = await launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
                   if (!ok && ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(info.url)));
@@ -183,4 +198,103 @@ class InstUpdate {
       _showing = false;
     }
   }
+
+  /// PC auto-update: Setup.exe temp mein (progress ke saath), SHA-256 mile to milao, phir chup chaap install
+  /// (`/VERYSILENT`) — installer purani app band karta hai, nayi files lagata hai aur app dobara kholta hai.
+  /// Data (AppData / Documents) aur license wahi rehte hain.
+  static Future<void> _installWindows(BuildContext context, UpdateInfo info) async {
+    final progress = ValueNotifier<double>(0);
+    var cancelled = false;
+    var dialogOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(Loc.t('Downloading update...', 'اپڈیٹ ڈاؤن لوڈ ہو رہا ہے...')),
+        content: ValueListenableBuilder<double>(
+          valueListenable: progress,
+          builder: (_, v, __) => Column(mainAxisSize: MainAxisSize.min, children: [
+            LinearProgressIndicator(value: v > 0 ? v : null),
+            const SizedBox(height: 8),
+            Text(v > 0 ? '${(v * 100).round()}%' : ''),
+          ]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              cancelled = true;
+              dialogOpen = false;
+              Navigator.pop(ctx);
+            },
+            child: Text(Loc.t('Cancel', 'منسوخ')),
+          ),
+        ],
+      ),
+    );
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}${Platform.pathSeparator}Hanna-Installment-Setup-${info.build}.exe');
+      final req = await client.getUrl(Uri.parse(info.url));
+      final res = await req.close();
+      if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
+      final total = res.contentLength;
+      final sink = file.openWrite();
+      var got = 0;
+      final hashSink = _DigestSink();
+      final hasher = crypto.sha256.startChunkedConversion(hashSink);
+      await for (final chunk in res) {
+        if (cancelled) break;
+        sink.add(chunk);
+        hasher.add(chunk);
+        got += chunk.length;
+        if (total > 0) progress.value = got / total;
+      }
+      await sink.close();
+      hasher.close();
+      if (cancelled) {
+        try {
+          await file.delete();
+        } catch (_) {}
+        return;
+      }
+      if (info.sha256.isNotEmpty && hashSink.value?.toString() != info.sha256) {
+        try {
+          await file.delete();
+        } catch (_) {}
+        throw const FormatException('Downloaded file does not match (sha256) — not installed.');
+      }
+      if (dialogOpen && context.mounted) {
+        dialogOpen = false;
+        Navigator.of(context, rootNavigator: true).pop(); // progress band
+      }
+      await Process.start(
+        file.path,
+        ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
+        mode: ProcessStartMode.detached,
+      );
+      exit(0); // installer purani app ki files badal sake
+    } catch (e) {
+      if (context.mounted) {
+        if (dialogOpen) {
+          dialogOpen = false;
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(Loc.t('Update failed: $e — download it from the link instead.', 'اپڈیٹ ناکام: $e — لنک سے ڈاؤن لوڈ کریں۔'))));
+        await launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
+      }
+    } finally {
+      client.close(force: true);
+      progress.dispose();
+    }
+  }
+}
+
+class _DigestSink implements Sink<crypto.Digest> {
+  crypto.Digest? value;
+  @override
+  void add(crypto.Digest data) => value = data;
+  @override
+  void close() {}
 }

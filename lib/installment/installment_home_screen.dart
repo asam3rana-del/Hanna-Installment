@@ -498,7 +498,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
           () => _push(const InstCashSalesScreen())),
       _Tile(Icons.category_outlined, Loc.t('Categories', 'کیٹیگریز'), Loc.t('IMEI / serial fields', 'IMEI / سیریل فیلڈز'), p.amber,
           () => _push(const InstCategoriesScreen())),
-      _Tile(Icons.storefront_outlined, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, backup', 'کیش، خرچے، اسٹاف، بیک اپ'), p.orange,
+      _Tile(Icons.storefront_outlined, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, rent, bills', 'کیش، خرچے، اسٹاف، کرایہ، بل'), p.orange,
           () => _push(const InstShopToolsScreen())),
     ];
     final tiles = <_Tile>[

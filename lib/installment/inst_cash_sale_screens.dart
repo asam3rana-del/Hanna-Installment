@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import 'inst_cash_sale_repository.dart';
 import 'inst_models.dart';
@@ -118,7 +119,7 @@ class _InstCashSalesScreenState extends State<InstCashSalesScreen> {
                         ),
                       ),
                     )
-                  : ListView.builder(
+                  : DeskListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                       itemCount: list.length,
                       itemBuilder: (_, i) {
@@ -319,7 +320,7 @@ class _InstNewCashSaleScreenState extends State<InstNewCashSaleScreen> {
                                 child: Text(
                                     _stock.isEmpty ? Loc.t('Stock is empty.', 'اسٹاک خالی ہے۔') : Loc.t('Nothing found.', 'کچھ نہیں ملا۔'),
                                     style: TextStyle(color: p.textMuted)))
-                            : ListView.builder(
+                            : DeskListView(
                                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                                 itemCount: list.length,
                                 itemBuilder: (_, i) {

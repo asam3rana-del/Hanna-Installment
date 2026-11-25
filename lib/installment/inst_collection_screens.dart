@@ -5,8 +5,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
+import 'inst_exports.dart';
 import 'inst_models.dart';
 import 'inst_photo_widgets.dart';
 import 'inst_plan_math.dart';
@@ -124,6 +126,11 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
             icon: const Icon(Icons.share_outlined, color: Colors.white),
             onPressed: rows.isEmpty ? null : () => _share(rows),
           ),
+          IconButton(
+              tooltip: Loc.t('Excel / PDF', 'ایکسل / PDF'),
+              icon: const Icon(Icons.table_chart_outlined, color: Colors.white),
+              onPressed: rows.isEmpty ? null : () => exportPlans(context, base: 'Collection', title: Loc.t('Collection List', 'وصولی لسٹ'), plans: rows),
+            ),
         ]),
         SizedBox(
           height: 50,
@@ -152,7 +159,7 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
                   ? Center(child: Text(Loc.t('Nothing to collect here.', 'یہاں کچھ وصول نہیں کرنا۔'), style: TextStyle(color: p.textMuted)))
                   : RefreshIndicator(
                       onRefresh: _reload,
-                      child: ListView.builder(
+                      child: DeskListView(
                         padding: const EdgeInsets.fromLTRB(16, 6, 16, 40),
                         itemCount: rows.length,
                         itemBuilder: (_, i) => _row(p, rows[i]),
@@ -245,7 +252,13 @@ class _InstDefaultersScreenState extends State<InstDefaultersScreen> {
     return Scaffold(
       backgroundColor: p.bg,
       body: Column(children: [
-        instHeader(context, p, Loc.t('Defaulters', 'ڈیفالٹرز'), Loc.t('Late customers and their guarantors', 'لیٹ کسٹمر اور ان کے ضامن')),
+        instHeader(context, p, Loc.t('Defaulters', 'ڈیفالٹرز'), Loc.t('Late customers and their guarantors', 'لیٹ کسٹمر اور ان کے ضامن'), actions: [
+          IconButton(
+              tooltip: Loc.t('Excel / PDF', 'ایکسل / PDF'),
+              icon: const Icon(Icons.table_chart_outlined, color: Colors.white),
+              onPressed: rows.isEmpty ? null : () => exportPlans(context, base: 'Defaulters', title: Loc.t('Defaulters', 'ڈیفالٹرز'), plans: rows),
+            ),
+        ]),
         SizedBox(
           height: 50,
           child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.fromLTRB(12, 8, 12, 0), children: [
@@ -281,7 +294,7 @@ class _InstDefaultersScreenState extends State<InstDefaultersScreen> {
                   ? Center(child: Text(Loc.t('No defaulters. 👍', 'کوئی ڈیفالٹر نہیں۔ 👍'), style: TextStyle(color: p.textMuted)))
                   : RefreshIndicator(
                       onRefresh: _reload,
-                      child: ListView.builder(
+                      child: DeskListView(
                         padding: const EdgeInsets.fromLTRB(16, 6, 16, 40),
                         itemCount: rows.length,
                         itemBuilder: (_, i) => _card(p, rows[i]),

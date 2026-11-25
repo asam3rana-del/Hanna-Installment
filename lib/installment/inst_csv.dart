@@ -54,11 +54,37 @@ class InstCsv {
     final clean = base.trim().replaceAll(RegExp(r'[^\w؀-ۿ-]+'), '_');
     final f = File(p.join(dir.path, '${clean.isEmpty ? 'Report' : clean}_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.csv'));
     await f.writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(text)], flush: true);
+    if (Platform.isWindows) {
+      // PC: share sheet ka faida nahi — Documents\Hanna Installment Exports mein rakh kar seedha Excel mein kholo.
+      final saved = await saveForDesktop(f);
+      await openOnDesktop(saved.path);
+      return;
+    }
     try {
       await Share.shareXFiles([XFile(f.path, mimeType: 'text/csv')], subject: base);
     } catch (_) {
       final r = await OpenFilex.open(f.path, type: 'text/csv');
       if (r.type != ResultType.done) rethrow;
     }
+  }
+}
+
+
+/// PC (Windows): export ki gayi file `Documents\Hanna Installment Exports` mein (mehfooz, dhoondni aasaan).
+Future<File> saveForDesktop(File temp) async {
+  final docs = await getApplicationDocumentsDirectory();
+  final dir = Directory(p.join(docs.path, 'Hanna Installment Exports'));
+  if (!await dir.exists()) await dir.create(recursive: true);
+  return temp.copy(p.join(dir.path, p.basename(temp.path)));
+}
+
+/// PC: file us ke apne program (Excel / PDF reader) mein kholo; na khule to folder.
+Future<void> openOnDesktop(String path) async {
+  try {
+    await Process.start('explorer', [path], runInShell: false);
+  } catch (_) {
+    try {
+      await Process.start('explorer', ['/select,', path]);
+    } catch (_) {}
   }
 }

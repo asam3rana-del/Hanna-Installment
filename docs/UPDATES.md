@@ -27,3 +27,12 @@ se haath se bhi.
 - Sirf `https://` link chalta hai.
 - Android sirf usi keystore se sign hui APK ko update maanta hai — koi ghalat link de bhi de to install nahi hogi.
 - `build` hamesha CI ka run number (app mein `--dart-define=APP_BUILD`, build.yml). Local build (0) par auto check band.
+
+
+## PC (Windows) — khud update
+- Build ka artifact **windows-installer** (`Hanna-Installment-Setup.exe` + `sha256.txt`).
+- Release mein `Hanna-Installment-Setup.exe` daalein; `update.json` ke `"windows"` mein `url` = us ka link aur
+  `sha256` = `sha256.txt` wali value.
+- PC app "Download" dabane par Setup khud download karti hai, sha256 milati hai, chup chaap install karti hai
+  (purani app band, nayi lag kar khud khulti hai). Data aur license wahi.
+- Link `.zip` ka ho to purani tarah browser mein khulta hai.

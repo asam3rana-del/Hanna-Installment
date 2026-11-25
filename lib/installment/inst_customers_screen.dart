@@ -9,14 +9,17 @@ import '../models/party.dart';
 import '../services/party_photo_store.dart';
 import '../services/session.dart';
 import '../theme/theme_manager.dart';
+import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
+import 'inst_exports.dart';
 import 'inst_cash_sale_repository.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_models.dart';
+import 'inst_pdf.dart';
 import 'inst_photo_widgets.dart';
 import 'inst_plans_screen.dart';
-import 'inst_plan_math.dart' show planActive, planCompleted, planRepossessed;
+import 'inst_plan_math.dart' show planActive, planCompleted, planRepossessed, payAdvance, payDiscount;
 import 'inst_plan_repository.dart';
 import 'inst_repository.dart';
 import 'inst_ui.dart';
@@ -82,12 +85,18 @@ class _InstCustomersScreenState extends State<InstCustomersScreen> {
         label: Text(Loc.t('New Customer', 'نیا کسٹمر')),
       ),
       body: Column(children: [
-        instHeader(context, p, Loc.t('Customers', 'کسٹمرز'), Loc.t('${_all.length} total', 'کل ${_all.length}')),
+        instHeader(context, p, Loc.t('Customers', 'کسٹمرز'), Loc.t('${_all.length} total', 'کل ${_all.length}'), actions: [
+            IconButton(
+              tooltip: Loc.t('Excel / PDF', 'ایکسل / PDF'),
+              icon: const Icon(Icons.table_chart_outlined, color: Colors.white),
+              onPressed: list.isEmpty ? null : () => exportCustomers(context, list),
+            ),
+        ]),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
           child: TextField(
             onChanged: (v) => setState(() => _q = v),
-            decoration: instDeco(p, Loc.t('Search name, phone or CNIC', 'نام، فون یا شناختی کارڈ سے تلاش'),
+            decoration: instDeco(p, Loc.t('Search name, phone, CNIC, khata no., IMEI', 'نام، فون، شناختی کارڈ، کھاتہ نمبر، IMEI سے تلاش'),
                 suffix: const Icon(Icons.search)),
           ),
         ),
@@ -117,7 +126,7 @@ class _InstCustomersScreenState extends State<InstCustomersScreen> {
                         ),
                       ),
                     )
-                  : ListView.builder(
+                  : DeskListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                       itemCount: list.length,
                       itemBuilder: (_, i) => _tile(p, list[i]),
@@ -301,6 +310,8 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
         ),
         Expanded(
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+            // PC: bayen tasveerein + zaati, dayen rabta + kaam.
+            ...deskSplit(context, [
             instSectionTitle(p, Loc.t('PHOTOS', 'تصویریں')),
             Container(
               padding: const EdgeInsets.all(14),
@@ -327,6 +338,7 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
               controller: _khata,
               decoration: instDeco(p, Loc.t('Register khata no.', 'رجسٹر کھاتہ نمبر'), hint: Loc.t('optional', 'اختیاری')),
             ),
+            ], [
             instSectionTitle(p, Loc.t('CONTACT', 'رابطہ')),
             TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: instDeco(p, Loc.t('Phone', 'فون'), hint: '03xx xxxxxxx')),
             gap(),
@@ -346,6 +358,7 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
             ),
             gap(),
             TextField(controller: _note, maxLines: 2, decoration: instDeco(p, Loc.t('Note', 'نوٹ'))),
+            ]),
             const SizedBox(height: 20),
             instPrimaryButton(p, _saving ? Loc.t('Saving...', 'محفوظ ہو رہا ہے...') : Loc.t('Save', 'محفوظ کریں'), _saving ? null : _save),
           ]),
@@ -569,6 +582,8 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                             ),
                           ]),
                         ),
+                      // PC: bayen customer, kagzat, zamin; dayen plans aur khata.
+                      ...deskSplit(context, [
                       _profileCard(p, c),
                       const SizedBox(height: 12),
                       if (c.phone.isNotEmpty)
@@ -577,8 +592,21 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                           label: Text(Loc.t('Call', 'کال')),
                           onPressed: () => _call(c.phone),
                         ),
+                      ], [
                       instSectionTitle(p, Loc.t('INSTALLMENT PLANS', 'قسط پلان')),
                       if (_plans.isNotEmpty) _historyCard(p),
+                      // Poora khata: is customer ki har wasooli (sab plans) tareekh-war — kab kitna diya.
+                      if (_plans.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                            icon: const Icon(Icons.receipt_long_outlined),
+                            label: Text(Loc.t('Full khata — all payments with dates', 'پورا کھاتہ — ہر ادائیگی تاریخ کے ساتھ')),
+                            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => InstCustomerLedgerScreen(customerName: c.name, khataNo: _p?.khataNo ?? '', plans: _plans))),
+                          ),
+                        ),
                       for (final v in _plans)
                         PlanTile(
                           view: v,
@@ -617,6 +645,7 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                             ),
                           ),
                       ],
+                      ], leftTail: [
                       instSectionTitle(p, Loc.t('DOCUMENTS', 'کاغذات')),
                       KycPhotoRow(owner: 'c', id: c.id!, kinds: const [
                         KycPhotoStore.cnicFront,
@@ -644,6 +673,7 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                         label: Text(Loc.t('Add guarantor', 'ضامن شامل کریں')),
                         onPressed: () => _editGuarantor(),
                       ),
+                      ], leftFlex: 2, rightFlex: 3),
                     ]),
         ),
       ]),
@@ -1061,3 +1091,138 @@ Future<bool> instRiskCheck(BuildContext context, int customerId, {List<int> guar
   return go == true;
 }
 
+
+/// Ek customer ka poora khata (Step 33): sab plans ki har wasooli — advance, qist, rayat — tareekh ke hisaab se,
+/// kis saman ki, kitni, kaise (cash / bank), kis ne li. Upar kul kharida / kul diya / baqi. PDF / Excel share.
+class InstCustomerLedgerScreen extends StatelessWidget {
+  final String customerName;
+  final String khataNo;
+  final List<PlanView> plans;
+  const InstCustomerLedgerScreen({super.key, required this.customerName, required this.khataNo, required this.plans});
+
+  static String _d(int ms) {
+    final t = DateTime.fromMillisecondsSinceEpoch(ms);
+    return '${t.day.toString().padLeft(2, '0')}-${t.month.toString().padLeft(2, '0')}-${t.year}';
+  }
+
+  List<(InstPayment, PlanView)> get _rows {
+    final out = <(InstPayment, PlanView)>[
+      for (final v in plans)
+        for (final pay in v.payments) (pay, v),
+    ];
+    out.sort((a, b) => b.$1.paidAt != a.$1.paidAt ? b.$1.paidAt.compareTo(a.$1.paidAt) : b.$1.id.compareTo(a.$1.id));
+    return out;
+  }
+
+  String _kind(InstPayment pay) => pay.kind == payAdvance
+      ? Loc.t('Advance', 'ایڈوانس')
+      : pay.kind == payDiscount
+          ? Loc.t('Discount', 'رعایت')
+          : Loc.t('Installment', 'قسط');
+
+  Future<void> _share(BuildContext context) async {
+    final rows = _rows;
+    final bought = plans.fold<double>(0, (a, v) => a + v.plan.totalPrice);
+    final paid = plans.fold<double>(0, (a, v) => a + v.advancePaid + v.status.paid);
+    final left = plans.where((v) => v.plan.status == planActive).fold<double>(0, (a, v) => a + v.status.remaining);
+    await InstPdf.shareTable(
+      context,
+      base: 'khata_${customerName.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}',
+      title: '${Loc.t('Khata', 'کھاتہ')} — $customerName',
+      sub: khataNo.trim().isEmpty ? '' : '${Loc.t('Khata no.', 'کھاتہ نمبر')} ${khataNo.trim()}',
+      summary: [
+        (Loc.t('Total bought', 'کل خریدا'), instRs(bought)),
+        (Loc.t('Total paid', 'کل ادا'), instRs(paid)),
+        (Loc.t('Remaining', 'باقی'), instRs(left)),
+      ],
+      headers: [Loc.t('Date', 'تاریخ'), Loc.t('Item / plan', 'سامان / پلان'), Loc.t('Type', 'قسم'), Loc.t('Amount', 'رقم'), Loc.t('By', 'ذریعہ')],
+      rows: [
+        for (final (pay, v) in rows)
+          [
+            _d(pay.paidAt),
+            '${v.itemTitle} (${v.plan.planNo})',
+            _kind(pay),
+            instRs(pay.amount + pay.fine),
+            pay.kind == payDiscount ? '-' : (pay.method == 'bank' ? Loc.t('Bank', 'بینک') : Loc.t('Cash', 'کیش')),
+          ]
+      ],
+      flex: const [2, 4, 2, 2, 2],
+      right: const {3},
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ThemeManager.palette;
+    final rows = _rows;
+    final bought = plans.fold<double>(0, (a, v) => a + v.plan.totalPrice);
+    final paid = plans.fold<double>(0, (a, v) => a + v.advancePaid + v.status.paid);
+    final left = plans.where((v) => v.plan.status == planActive).fold<double>(0, (a, v) => a + v.status.remaining);
+    Widget cell(String label, String value, Color c) => Expanded(
+          child: Column(children: [
+            Text(value, style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(label, textAlign: TextAlign.center, style: TextStyle(color: p.textMuted, fontSize: 11)),
+          ]),
+        );
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Column(children: [
+        instHeader(
+          context,
+          p,
+          '${Loc.t('Khata', 'کھاتہ')} — $customerName',
+          khataNo.trim().isEmpty ? Loc.t('All payments', 'تمام ادائیگیاں') : '${Loc.t('Khata no.', 'کھاتہ نمبر')} ${khataNo.trim()}',
+          actions: [
+            IconButton(
+              tooltip: Loc.t('Share PDF / Excel', 'PDF / Excel شیئر'),
+              icon: const Icon(Icons.share_outlined, color: Colors.white),
+              onPressed: rows.isEmpty ? null : () => _share(context),
+            ),
+          ],
+        ),
+        Expanded(
+          child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 40), children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: instCard(p),
+              child: Row(children: [
+                cell(Loc.t('Total bought', 'کل خریدا'), instRs(bought), p.textDark),
+                cell(Loc.t('Total paid', 'کل ادا'), instRs(paid), p.teal),
+                cell(Loc.t('Remaining', 'باقی'), instRs(left), left > 0.5 ? p.amber : p.teal),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Center(child: Text(Loc.t('No payments yet.', 'ابھی کوئی ادائیگی نہیں۔'), style: TextStyle(color: p.textMuted))),
+              ),
+            for (final (pay, v) in rows)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: instCard(p),
+                child: ListTile(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => InstPlanDetailScreen(planId: v.plan.id))),
+                  leading: CircleAvatar(
+                    backgroundColor: (pay.kind == payDiscount ? p.amber : p.teal).withOpacity(0.15),
+                    child: Icon(pay.kind == payDiscount ? Icons.percent : Icons.payments_outlined,
+                        color: pay.kind == payDiscount ? p.amber : p.teal, size: 20),
+                  ),
+                  title: Text('${_d(pay.paidAt)}  •  ${instRs(pay.amount + pay.fine)}',
+                      style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                    '${_kind(pay)} — ${v.itemTitle} (${v.plan.planNo})'
+                    '${pay.kind == payDiscount ? '' : '  •  ${pay.method == 'bank' ? Loc.t('Bank', 'بینک') : Loc.t('Cash', 'کیش')}'}'
+                    '${pay.fine > 0 ? '  •  ${Loc.t('fine', 'جرمانہ')} ${instRs(pay.fine)}' : ''}'
+                    '${pay.receivedBy.isNotEmpty ? '  •  ${pay.receivedBy}' : ''}',
+                    style: TextStyle(color: p.textMuted, fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                ),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}

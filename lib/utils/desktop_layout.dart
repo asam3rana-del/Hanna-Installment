@@ -198,3 +198,63 @@ class _Sidebar extends StatelessWidget {
     );
   }
 }
+
+/// PC par screen do hisson mein: [left] bayen, [right] dayen (har ek apni column). Mobile / patli window par
+/// pehle left phir right (pehle jaisa). Forms aur detail screens ke liye.
+/// [leftTail]: PC par bayen column ke neeche; mobile par sab se aakhir mein (mobile ki purani tarteeb qaim).
+List<Widget> deskSplit(BuildContext context, List<Widget> left, List<Widget> right,
+    {List<Widget> leftTail = const [], double gap = 20, int leftFlex = 1, int rightFlex = 1}) {
+  if (!isDesktopWide(context)) return [...left, ...right, ...leftTail];
+  return [
+    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(flex: leftFlex, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...left, ...leftTail])),
+      SizedBox(width: gap),
+      Expanded(flex: rightFlex, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right)),
+    ]),
+  ];
+}
+
+/// `ListView.builder` jaisa, magar PC par chaurai ke hisaab se 2-3 cards ek line mein (har card kam se kam
+/// [minItemWidth]). Mobile par bilkul ListView.builder. RefreshIndicator ke andar bhi chalta hai.
+class DeskListView extends StatelessWidget {
+  const DeskListView({
+    super.key,
+    required this.itemCount,
+    required this.itemBuilder,
+    this.padding,
+    this.minItemWidth = 440,
+    this.maxColumns = 3,
+    this.gap = 12,
+  });
+
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+  final EdgeInsetsGeometry? padding;
+  final double minItemWidth;
+  final int maxColumns;
+  final double gap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isDesktopApp) {
+      return ListView.builder(padding: padding, itemCount: itemCount, itemBuilder: itemBuilder);
+    }
+    return LayoutBuilder(builder: (context, cons) {
+      final cols = (cons.maxWidth / minItemWidth).floor().clamp(1, maxColumns);
+      if (cols <= 1) {
+        return ListView.builder(padding: padding, itemCount: itemCount, itemBuilder: itemBuilder);
+      }
+      final rows = (itemCount + cols - 1) ~/ cols;
+      return ListView.builder(
+        padding: padding,
+        itemCount: rows,
+        itemBuilder: (context, r) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (var j = 0; j < cols; j++) ...[
+            if (j > 0) SizedBox(width: gap),
+            Expanded(child: r * cols + j < itemCount ? itemBuilder(context, r * cols + j) : const SizedBox.shrink()),
+          ],
+        ]),
+      );
+    });
+  }
+}

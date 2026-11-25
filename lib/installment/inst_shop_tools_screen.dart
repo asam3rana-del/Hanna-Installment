@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../screens/about_screen.dart';
-import '../screens/backup_export_screen.dart';
 import '../screens/cash_register_screen.dart';
 import '../screens/cash_screen.dart';
 import '../screens/day_book_screen.dart';
 import '../screens/expense_screen.dart';
-import '../screens/recycle_bin_screen.dart';
 import '../screens/shop_rent_screen.dart';
-import '../screens/user_management_screen.dart';
 import '../screens/utility_bills_screen.dart';
 import '../screens/workers_screen.dart';
 import '../services/session.dart';
@@ -29,7 +25,6 @@ class InstShopToolsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = ThemeManager.palette;
     final mgr = Session.isAdminOrManager;
-    final admin = Session.isAdmin;
     final rows = <(IconData, String, String, Color, Widget Function())>[
       (Icons.swap_vert, Loc.t('Cash In / Out', 'کیش ان / آؤٹ'), Loc.t('Other money in and out', 'باقی رقم کا آنا جانا'), p.teal, () => const CashScreen()),
       (Icons.receipt_long_outlined, Loc.t('Expenses', 'خرچے'), Loc.t('Shop expenses', 'دکان کے خرچے'), p.red, () => const ExpenseScreen()),
@@ -39,15 +34,11 @@ class InstShopToolsScreen extends StatelessWidget {
       if (mgr) (Icons.store_mall_directory_outlined, Loc.t('Shop Rent', 'دکان کا کرایہ'), Loc.t('Monthly rent', 'ماہانہ کرایہ'), p.orange, () => const ShopRentScreen()),
       if (mgr) (Icons.bolt_outlined, Loc.t('Utility Bills', 'بل'), Loc.t('Electricity, gas, internet', 'بجلی، گیس، انٹرنیٹ'), p.blue, () => const UtilityBillsScreen()),
       if (mgr) (Icons.gavel_outlined, Loc.t('Agreement terms', 'اقرار نامہ کی شرائط'), Loc.t('Printed on plan PDF', 'پلان کی PDF پر چھپیں'), p.navy, () => const InstTermsScreen()),
-      if (admin) (Icons.backup_outlined, Loc.t('Backup / Restore', 'بیک اپ'), Loc.t('Save your data', 'ڈیٹا محفوظ کریں'), p.teal, () => const BackupExportScreen()),
-      if (admin) (Icons.manage_accounts_outlined, Loc.t('Users', 'یوزرز'), Loc.t('Staff login and roles', 'اسٹاف لاگ اِن'), p.navyLight, () => const UserManagementScreen()),
-      if (admin) (Icons.restore_from_trash_outlined, Loc.t('Recycle Bin', 'ری سائیکل بن'), Loc.t('Deleted records', 'حذف شدہ ریکارڈ'), p.textMuted, () => const RecycleBinScreen()),
-      (Icons.info_outline, Loc.t('About', 'ایپ کے بارے میں'), Loc.t('Version and support', 'ورژن اور رابطہ'), p.textMuted, () => const AboutScreen()),
     ];
     return Scaffold(
       backgroundColor: p.bg,
       body: Column(children: [
-        instHeader(context, p, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, backup', 'کیش، خرچے، اسٹاف، بیک اپ')),
+        instHeader(context, p, Loc.t('Shop tools', 'دکان کے ٹولز'), Loc.t('Cash, expenses, staff, rent, bills', 'کیش، خرچے، اسٹاف، کرایہ، بل')),
         Expanded(
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
            // PC: do columns.

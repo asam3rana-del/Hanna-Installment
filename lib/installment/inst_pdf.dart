@@ -587,6 +587,13 @@ class InstPdf {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final f = await _write(bytes, base);
+      if (Platform.isWindows) {
+        // PC: PDF Documents\Hanna Installment Exports mein save aur khol do (wahan se print / WhatsApp Desktop par bhejein).
+        final saved = await saveForDesktop(f);
+        await openOnDesktop(saved.path);
+        messenger.showSnackBar(SnackBar(content: Text(Loc.t('Saved: ${saved.path}', 'محفوظ: ${saved.path}'))));
+        return;
+      }
       final digits = whatsAppDigits(phone);
       if (digits.isNotEmpty && await WhatsAppPdf.send(f, digits, text: text)) return;
       await SlipPdfService.shareFile(f, subject: base);

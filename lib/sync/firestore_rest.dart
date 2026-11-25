@@ -206,7 +206,14 @@ class RestTx {
   final String project;
   final List<Map<String, Object?>> writes = [];
 
-  Future<RestDoc> get(String collection, String docId) => _fs.getDoc(collection, docId, transaction: id);
+  Future<RestDoc> get(String collection, String docId) async {
+    try {
+      return await _fs.getDoc(collection, docId, transaction: id);
+    } on RestFirebaseException catch (e) {
+      // Sync History mein saaf likha aaye ke parhne mein ruka (kis document par).
+      throw RestFirebaseException(e.code, '${e.message} [read $collection/$docId]', e.status);
+    }
+  }
 
   /// `tx.set(ref, map, SetOptions(merge: true))` (merge) ya `SetOptions(mergeFields: [...])`.
   void set(String collection, String docId, Map<String, Object?> map, {bool merge = false, List<String>? mergeFields}) {
@@ -537,7 +544,16 @@ class FirestoreRest {
         await commit(tx.writes, transaction: txId);
         return result;
       } on RestFirebaseException catch (e) {
-        if (e.code != 'aborted' || attempt >= 5) rethrow;
+        if (e.code != 'aborted' || attempt >= 5) {
+          // Likhne mein ruka: kaun sa document aur kaun se fields (rules ki jaanch ke liye).
+          final what = [
+            for (final w in tx.writes)
+              if (w['update'] is Map)
+                '${((w['update'] as Map)['name'] ?? '').toString().split('/documents/').last}'
+                    ' branchId=${decodeValue(((w['update'] as Map)['fields'] as Map?)?['branchId'])}'
+          ].join('; ');
+          throw RestFirebaseException(e.code, '${e.message} [write $what]', e.status);
+        }
         await Future<void>.delayed(Duration(milliseconds: 200 * attempt + rnd.nextInt(300)));
       }
     }

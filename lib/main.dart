@@ -29,6 +29,7 @@ import 'sync/sync_keepalive.dart';
 import 'sync/sync_worker.dart';
 import 'theme/theme_manager.dart';
 import 'utils/desktop_layout.dart';
+import 'utils/desktop_window.dart';
 import 'utils/loc.dart';
 
 void main() async {
@@ -84,6 +85,7 @@ void main() async {
     unawaited(OffsiteBackup.checkAndNotify());
   } catch (_) {}
   runApp(const AhDeveloperApp());
+  DesktopWindow.init(); // PC: window ki jagah / size yaad (Windows par hi)
   unawaited(DueAlertService.handleLaunch());
 }
 
