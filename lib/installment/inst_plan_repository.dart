@@ -8,6 +8,7 @@ import '../models/misc_entities.dart' show CashTransaction;
 import '../services/session.dart';
 import '../sync/device_tag.dart';
 import '../sync/sync_queue_helper.dart';
+import 'inst_opening_balance.dart';
 import 'inst_models.dart';
 import 'inst_plan_math.dart';
 import 'inst_reports.dart';
@@ -876,14 +877,19 @@ class InstPlanRepository {
     final end = DateTime.fromMillisecondsSinceEpoch(t).add(const Duration(days: 1)).millisecondsSinceEpoch;
     final got = await db.rawQuery(
         "SELECT COALESCE(SUM(amount + fine), 0) AS v FROM inst_payments WHERE paidAt >= ? AND paidAt < ? AND kind != '$payDiscount'", [t, end]);
+    // Purana baqi (v49): bacha hua "lena hai" mein, tareekh guzri to "Late" mein, aaj ki wasooli "Collected" mein.
+    var op = (remaining: 0.0, late: 0.0, lateCount: 0, receivedToday: 0.0);
+    try {
+      op = await InstOpeningRepository.instance.totals(today: t);
+    } catch (_) {} // purani DB (table nahi) — sirf qist ka hisaab
     return InstCollectionStats(
       activePlans: views.length,
       dueToday: dueToday,
       dueTodayCount: dueTodayCount,
-      overdue: overdue,
-      overdueCount: overdueCount,
-      receivable: receivable,
-      collectedToday: ((got.first['v'] as num?) ?? 0).toDouble(),
+      overdue: overdue + op.late,
+      overdueCount: overdueCount + op.lateCount,
+      receivable: receivable + op.remaining,
+      collectedToday: ((got.first['v'] as num?) ?? 0).toDouble() + op.receivedToday,
     );
   }
 }

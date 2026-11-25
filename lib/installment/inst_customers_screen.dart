@@ -12,6 +12,7 @@ import '../theme/theme_manager.dart';
 import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
+import 'inst_opening_balance.dart';
 import 'inst_exports.dart';
 import 'inst_cash_sale_repository.dart';
 import 'inst_cash_sale_screens.dart';
@@ -210,6 +211,10 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
   late final _income = TextEditingController(
       text: (widget.profile?.monthlyIncome ?? 0) > 0 ? instPlain(widget.profile!.monthlyIncome) : '');
   late final _note = TextEditingController(text: widget.profile?.note ?? '');
+  // Purana baqi (software se pehle ka udhaar) + kab tak — sirf Admin / Manager.
+  late final _opening = TextEditingController(
+      text: (widget.profile?.openingBalance ?? 0) > 0 ? instPlain(widget.profile!.openingBalance) : '');
+  late int _openingDue = widget.profile?.openingDue ?? 0;
   bool _saving = false;
   PhotoSlot _face = PhotoSlot();
   PhotoSlot _cnicF = PhotoSlot();
@@ -256,10 +261,16 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _father, _cnic, _khata, _phone, _phone2, _address, _occupation, _workAddress, _income, _note]) {
+    for (final c in [_name, _father, _cnic, _khata, _phone, _phone2, _address, _occupation, _workAddress, _income, _note, _opening]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  static String _fmtDay(int ms) {
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${d.day} ${m[d.month - 1]} ${d.year}';
   }
 
   Future<void> _save() async {
@@ -276,6 +287,8 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
       workAddress: _workAddress.text,
       monthlyIncome: instParse(_income.text),
       note: _note.text,
+      openingBalance: instParse(_opening.text),
+      openingDue: _openingDue,
     );
     try {
       final int id;
@@ -338,6 +351,37 @@ class _InstCustomerFormScreenState extends State<InstCustomerFormScreen> {
               controller: _khata,
               decoration: instDeco(p, Loc.t('Register khata no.', 'رجسٹر کھاتہ نمبر'), hint: Loc.t('optional', 'اختیاری')),
             ),
+            if (Session.isAdminOrManager) ...[
+              gap(),
+              TextField(
+                controller: _opening,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                onChanged: (_) => setState(() {}),
+                decoration: instDeco(p, Loc.t('Old balance (before software)', 'پرانا بقایا (سافٹ ویئر سے پہلے)'),
+                    hint: Loc.t('optional — amount he still owes', 'اختیاری — جو رقم ابھی دینی ہے')),
+              ),
+              if (instParse(_opening.text) > 0) ...[
+                gap(),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), alignment: Alignment.centerLeft),
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text(_openingDue > 0
+                      ? '${Loc.t('Pay by', 'ادائیگی کی تاریخ')}: ${_fmtDay(_openingDue)}'
+                      : Loc.t('Pay by date (optional)', 'ادائیگی کی تاریخ (اختیاری)')),
+                  onPressed: () async {
+                    final now = DateTime.now();
+                    final d = await showDatePicker(
+                      context: context,
+                      initialDate: _openingDue > 0 ? DateTime.fromMillisecondsSinceEpoch(_openingDue) : now.add(const Duration(days: 30)),
+                      firstDate: DateTime(now.year - 5),
+                      lastDate: DateTime(now.year + 10),
+                    );
+                    if (d != null) setState(() => _openingDue = DateTime(d.year, d.month, d.day).millisecondsSinceEpoch);
+                  },
+                ),
+              ],
+            ],
             ], [
             instSectionTitle(p, Loc.t('CONTACT', 'رابطہ')),
             TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: instDeco(p, Loc.t('Phone', 'فون'), hint: '03xx xxxxxxx')),
@@ -593,6 +637,8 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                           onPressed: () => _call(c.phone),
                         ),
                       ], [
+                      // Purana baqi (ho to): kitna, wasool, baqi + "Receive".
+                      InstOpeningCard(customerId: widget.customerId),
                       instSectionTitle(p, Loc.t('INSTALLMENT PLANS', 'قسط پلان')),
                       if (_plans.isNotEmpty) _historyCard(p),
                       // Poora khata: is customer ki har wasooli (sab plans) tareekh-war — kab kitna diya.

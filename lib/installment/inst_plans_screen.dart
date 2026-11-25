@@ -367,7 +367,9 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
 
   void _setItem(InstItem it) {
     setState(() {
-      _item = it; // sale price dukaandar khud likhta hai (pehle se nahi bharte)
+      _item = it;
+      // Khareed ke waqt likhi qist qeemat khud bhar do (dukaandar badal sakta hai). Na likhi ho to khaali.
+      if (it.instPrice > 0) _cash.text = instPlain(it.instPrice);
     });
   }
 
@@ -474,8 +476,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
         addLabel: Loc.t('Add item to stock', 'اسٹاک میں نیا سامان'),
         tile: (i) => ListTile(
           title: Text(i.title.isEmpty ? i.model : i.title),
+          // Qeemat nahi dikhate (customer saath baitha hota hai) — sirf naam, category, pehchan number.
           subtitle: Text([cats[i.categoryId] ?? '', if (i.primaryId.isNotEmpty) i.primaryId].join('  •  ')),
-          trailing: Text(instRs(i.cashPrice), style: const TextStyle(fontWeight: FontWeight.bold)),
         ),
       ),
     );
@@ -922,8 +924,7 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(it.title.isEmpty ? it.model : it.title, style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold, fontSize: 15.5)),
             if (it.primaryId.isNotEmpty) Text(it.primaryId, style: TextStyle(color: p.textMuted, fontSize: 12)),
-            if (Session.isAdminOrManager && it.costPrice > 0)
-              Text('${Loc.t('Cost', 'لاگت')} ${instRs(it.costPrice)}', style: TextStyle(color: p.textMuted, fontSize: 11.5)),
+            // Khareed qeemat yahan nahi (customer ke saamne screen hoti hai).
           ]),
         ),
         TextButton(onPressed: _pickItem, child: Text(Loc.t('Change', 'بدلیں'))),

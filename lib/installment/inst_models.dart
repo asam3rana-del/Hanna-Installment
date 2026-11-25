@@ -167,8 +167,11 @@ class InstItem {
   /// Khareed qeemat (profit ke liye; cashier ko nahi dikhti).
   final double costPrice;
 
-  /// Naqd (cash) qeemat — qist plan isi se shuru hota hai.
+  /// Naqd (cash) qeemat — naqd sale isi se shuru hoti hai.
   final double cashPrice;
+
+  /// Qist par farokht qeemat (khareed ke waqt likhi) — naya qist plan isi se khud bharta hai. 0 = nahi likhi.
+  final double instPrice;
   final int warrantyMonths;
   final String supplier;
   final String note;
@@ -188,6 +191,7 @@ class InstItem {
     this.idValues = const {},
     this.costPrice = 0,
     this.cashPrice = 0,
+    this.instPrice = 0,
     this.warrantyMonths = 0,
     this.supplier = '',
     this.note = '',
@@ -229,6 +233,7 @@ class InstItem {
         'idValues': jsonEncode(idValues),
         'costPrice': costPrice,
         'cashPrice': cashPrice,
+        'instPrice': instPrice,
         'warrantyMonths': warrantyMonths,
         'supplier': supplier,
         'note': note,
@@ -247,6 +252,7 @@ class InstItem {
         idValues: _stringMap((m['idValues'] as String?) ?? ''),
         costPrice: ((m['costPrice'] as num?) ?? 0).toDouble(),
         cashPrice: ((m['cashPrice'] as num?) ?? 0).toDouble(),
+        instPrice: ((m['instPrice'] as num?) ?? 0).toDouble(),
         warrantyMonths: ((m['warrantyMonths'] as num?) ?? 0).toInt(),
         supplier: (m['supplier'] as String?) ?? '',
         note: (m['note'] as String?) ?? '',
@@ -264,6 +270,7 @@ class InstItem {
     Map<String, String>? idValues,
     double? costPrice,
     double? cashPrice,
+    double? instPrice,
     int? warrantyMonths,
     String? supplier,
     String? note,
@@ -280,6 +287,7 @@ class InstItem {
         idValues: idValues ?? this.idValues,
         costPrice: costPrice ?? this.costPrice,
         cashPrice: cashPrice ?? this.cashPrice,
+        instPrice: instPrice ?? this.instPrice,
         warrantyMonths: warrantyMonths ?? this.warrantyMonths,
         supplier: supplier ?? this.supplier,
         note: note ?? this.note,
@@ -329,6 +337,12 @@ class CustomerProfile {
   /// Dukaan ke purane register ka khata number (v47) — search mein bhi.
   final String khataNo;
 
+  /// Purana baqi (v49): software se pehle ka udhaar. Wasooli `inst_customer_receipts` mein.
+  final double openingBalance;
+
+  /// Purana baqi kab tak dena hai (din ki shuruaat, millis). 0 = tareekh nahi.
+  final int openingDue;
+
   /// Blacklist (v45): khali nahi = customer block (wajah). Sirf [InstRepository.setBlocked] likhta hai —
   /// [toMap] mein nahi, taake profile edit karne se block na hatay.
   final String blockedReason;
@@ -348,6 +362,8 @@ class CustomerProfile {
     this.createdAt = 0,
     this.updatedAt = 0,
     this.khataNo = '',
+    this.openingBalance = 0,
+    this.openingDue = 0,
     this.blockedReason = '',
     this.blockedAt = 0,
   });
@@ -363,6 +379,8 @@ class CustomerProfile {
         'monthlyIncome': monthlyIncome,
         'note': note,
         'khataNo': khataNo.trim(),
+        'openingBalance': openingBalance,
+        'openingDue': openingDue,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
       };
@@ -380,6 +398,8 @@ class CustomerProfile {
         createdAt: ((m['createdAt'] as num?) ?? 0).toInt(),
         updatedAt: ((m['updatedAt'] as num?) ?? 0).toInt(),
         khataNo: (m['khataNo'] as String?) ?? '',
+        openingBalance: ((m['openingBalance'] as num?) ?? 0).toDouble(),
+        openingDue: ((m['openingDue'] as num?) ?? 0).toInt(),
         blockedReason: (m['blockedReason'] as String?) ?? '',
         blockedAt: ((m['blockedAt'] as num?) ?? 0).toInt(),
       );

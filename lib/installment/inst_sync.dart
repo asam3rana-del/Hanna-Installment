@@ -89,6 +89,8 @@ class InstSync {
       'blockedReason': _s(p['blockedReason']),
       'blockedAt': _i(p['blockedAt']),
       'khataNo': _s(p['khataNo']),
+      'openingBalance': _d(p['openingBalance']),
+      'openingDue': _i(p['openingDue']),
     }));
   }
 
@@ -151,6 +153,7 @@ class InstSync {
       for (final k in const ['brand', 'model', 'color', 'idValues', 'supplier', 'note', 'status']) k: _s(it[k]),
       'costPrice': _d(it['costPrice']),
       'cashPrice': _d(it['cashPrice']),
+      'instPrice': _d(it['instPrice']),
       'warrantyMonths': _i(it['warrantyMonths']),
       'purchaseDate': _i(it['purchaseDate']),
       'createdAt': _i(it['createdAt']),
@@ -329,6 +332,32 @@ class InstSync {
     }));
   }
 
+  // ---------------------------------------------------------------- purane baqi ki wasooli (v49)
+
+  static Future<void> enqueueCustomerReceipt(DatabaseExecutor ex, int id) async {
+    final r = await _row(ex, 'inst_customer_receipts', 'id', id);
+    if (r == null) return;
+    final csid = await customerServerId(ex, _i(r['customerId']));
+    if (csid == null) return;
+    String? cashSid;
+    final cashId = r['cashTxId'];
+    if (cashId is num) {
+      final cash = await _row(ex, 'cash_transactions', 'id', cashId.toInt());
+      if (cash != null) cashSid = SyncQueueHelper.cashTransactionEntityId(cash);
+    }
+    final eid = _own('inst_customer_receipt:', r);
+    await _stampServerId(ex, 'inst_customer_receipts', 'id', id, eid);
+    await SyncQueueHelper.enqueue(ex, instCustomerReceiptType, eid, 'upsert', _stamp({
+      'serverId': eid,
+      'customerServerId': csid,
+      'cashServerId': cashSid,
+      for (final k in const ['method', 'note', 'receivedBy']) k: _s(r[k]),
+      'amount': _d(r['amount']),
+      'paidAt': _i(r['paidAt']),
+      'createdAt': _i(r['createdAt']),
+    }));
+  }
+
   // ---------------------------------------------------------------- naqd sale (v42)
 
   static Future<void> enqueueCashSale(DatabaseExecutor ex, int id) async {
@@ -425,6 +454,11 @@ class InstSync {
     if (hasPurchases) {
       for (final r in await ex.query('inst_supplier_payments', columns: ['id'])) {
         await enqueueSupplierPayment(ex, _i(r['id']));
+      }
+    }
+    if ((await ex.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_customer_receipts'")).isNotEmpty) {
+      for (final r in await ex.query('inst_customer_receipts', columns: ['id'])) {
+        await enqueueCustomerReceipt(ex, _i(r['id']));
       }
     }
     if ((await ex.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_cash_sales'")).isNotEmpty) {
@@ -577,11 +611,46 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       'khataNo': _s(d['khataNo']),
       'updatedAt': _i(d['updatedAt']),
       'serverId': sid,
+      // Purana build ye fields nahi bhejta: us ki edit purana baqi 0 na kar de.
+      if (d.containsKey('openingBalance')) 'openingBalance': _d(d['openingBalance']),
+      if (d.containsKey('openingDue')) 'openingDue': _i(d['openingDue']),
     };
     if (await _row(db, 'customer_profiles', 'customerId', cid) == null) {
       await db.insert('customer_profiles', {...values, 'customerId': cid, 'createdAt': _i(d['createdAt'])});
     } else {
       await db.update('customer_profiles', values, where: 'customerId = ?', whereArgs: [cid]);
+    }
+  }
+
+  // ---- purane baqi ki wasooli (cash IN row POS sync se: cashServerId se jodo)
+  if ((await db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inst_customer_receipts'")).isNotEmpty) {
+    for (final d in of('inst_customer_receipts')) {
+      final sid = _sn(d['serverId']);
+      if (sid == null || await pending(instCustomerReceiptType, sid)) continue;
+      final localId = await _localIdBySid(db, 'inst_customer_receipts', sid);
+      if (d['_deleted'] == true) {
+        if (localId != null) await db.delete('inst_customer_receipts', where: 'id = ?', whereArgs: [localId]);
+        continue;
+      }
+      final cid = await _localIdBySid(db, 'customers', _s(d['customerServerId']));
+      if (cid == null) continue;
+      final cashSid = _sn(d['cashServerId']);
+      final cashId = cashSid == null ? null : await _localIdBySid(db, 'cash_transactions', cashSid);
+      final values = <String, Object?>{
+        'customerId': cid,
+        'amount': _d(d['amount']),
+        'method': _s(d['method']) == 'bank' ? 'bank' : 'cash',
+        'note': _s(d['note']),
+        'receivedBy': _s(d['receivedBy']),
+        'paidAt': _i(d['paidAt']),
+        'cashTxId': cashId,
+        'updatedAt': _i(d['updatedAt']),
+      };
+      if (localId == null) {
+        await db.insert('inst_customer_receipts', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
+      } else {
+        await db.update('inst_customer_receipts', values, where: 'id = ?', whereArgs: [localId]);
+      }
     }
   }
 
@@ -638,6 +707,8 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       'warrantyMonths': _i(d['warrantyMonths']),
       'purchaseDate': _i(d['purchaseDate']),
       'updatedAt': _i(d['updatedAt']),
+      // Purana build ye field nahi bhejta: us ki taraf se aayi tabdeeli qist qeemat 0 na kar de.
+      if (d.containsKey('instPrice')) 'instPrice': _d(d['instPrice']),
     };
     final purSid = _sn(d['purchaseServerId']);
     if (hasPurchases && purSid != null) {

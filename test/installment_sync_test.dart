@@ -71,7 +71,7 @@ void main() {
       expect(pullCollections, contains(e.value));
       expect(branchScopedCollections, contains(e.value));
     }
-    expect(instPullCollections.length, 13);
+    expect(instPullCollections.length, 14);
   });
 
   Future<void> seedA() async {
@@ -96,7 +96,7 @@ void main() {
   test('device A data appears on device B, linked by serverId', () async {
     await seedA();
     final docs = await _cloud(a);
-    const notSeeded = {'inst_photos', 'inst_price_changes', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_cash_sales', 'inst_purchase_returns'};
+    const notSeeded = {'inst_photos', 'inst_price_changes', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_cash_sales', 'inst_purchase_returns', 'inst_customer_receipts'};
     expect(docs.keys, containsAll(instPullCollections.where((c) => !notSeeded.contains(c))));
 
     // B: customer aur cash row POS sync se pehle aa chuke (alag local ids).

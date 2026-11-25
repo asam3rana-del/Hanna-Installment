@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 47;
+  static const _dbVersion = 49;
 
   Database? _db;
 
@@ -355,7 +355,7 @@ class AppDatabase {
       )
     ''');
 
-    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql, ...installmentPurchaseTablesSql, ...installmentCashSaleTablesSql, ...installmentPurchaseReturnTablesSql, ...installmentSecurityTablesSql]) {
+    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql, ...installmentPurchaseTablesSql, ...installmentCashSaleTablesSql, ...installmentPurchaseReturnTablesSql, ...installmentSecurityTablesSql, ...installmentCustomerReceiptTablesSql]) {
       batch.execute(sql);
     }
     final seedAt = DateTime.now().millisecondsSinceEpoch;
@@ -657,6 +657,18 @@ class AppDatabase {
     if (oldVersion < 47) {
       // v47: register ka khata number (customer profile).
       await _addColumnIfMissing(db, 'customer_profiles', 'khataNo', "TEXT NOT NULL DEFAULT ''");
+    }
+    if (oldVersion < 48) {
+      // v48: piece ki qist par farokht qeemat (khareed ke waqt likhi; naya qist plan isi se khud bharta hai).
+      await _addColumnIfMissing(db, 'inst_items', 'instPrice', 'REAL NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 49) {
+      // v49: customer ka purana baqi (opening balance + kab tak) aur us ki wasooli.
+      await _addColumnIfMissing(db, 'customer_profiles', 'openingBalance', 'REAL NOT NULL DEFAULT 0');
+      await _addColumnIfMissing(db, 'customer_profiles', 'openingDue', 'INTEGER NOT NULL DEFAULT 0');
+      for (final sql in installmentCustomerReceiptTablesSql) {
+        await db.execute(sql);
+      }
     }
     // products.searchTag was added to _onCreate WITHOUT a migration step, so a database created by the
     // earliest builds (schema v1) never got the column. Found by the real-file migration test
@@ -986,7 +998,9 @@ class AppDatabase {
         serverId TEXT,
         blockedReason TEXT NOT NULL DEFAULT '',
         blockedAt INTEGER NOT NULL DEFAULT 0,
-        khataNo TEXT NOT NULL DEFAULT ''
+        khataNo TEXT NOT NULL DEFAULT '',
+        openingBalance REAL NOT NULL DEFAULT 0,
+        openingDue INTEGER NOT NULL DEFAULT 0
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_customer_profiles_cnic ON customer_profiles (cnic)',
@@ -1036,7 +1050,8 @@ class AppDatabase {
         createdAt INTEGER NOT NULL DEFAULT 0,
         updatedAt INTEGER NOT NULL DEFAULT 0,
         serverId TEXT,
-        purchaseId INTEGER
+        purchaseId INTEGER,
+        instPrice REAL NOT NULL DEFAULT 0
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_items_category ON inst_items (categoryId, status)',
@@ -1174,6 +1189,27 @@ class AppDatabase {
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_supplier_payments_supplier ON inst_supplier_payments (supplierId, paidAt)',
+  ];
+
+  /// v49: customer ka purana baqi (opening balance, `customer_profiles.openingBalance`) ki wasooli.
+  /// `cashTxId` = saath bani cash IN row (aaj ke cash / cash book mein).
+  static const installmentCustomerReceiptTablesSql = <String>[
+    '''
+      CREATE TABLE IF NOT EXISTS inst_customer_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customerId INTEGER NOT NULL,
+        amount REAL NOT NULL DEFAULT 0,
+        method TEXT NOT NULL DEFAULT 'cash',
+        note TEXT NOT NULL DEFAULT '',
+        receivedBy TEXT NOT NULL DEFAULT '',
+        paidAt INTEGER NOT NULL DEFAULT 0,
+        cashTxId INTEGER,
+        createdAt INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        serverId TEXT
+      )
+    ''',
+    'CREATE INDEX IF NOT EXISTS index_inst_customer_receipts_customer ON inst_customer_receipts (customerId, paidAt)',
   ];
 
   /// v42: naqd sale. `costPrice` = bechte waqt piece ki khareed (munafa ke liye; baad ka rate badalna isay nahi badalta).

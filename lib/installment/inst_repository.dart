@@ -36,7 +36,7 @@ class InstRepository {
     final rows = await db.rawQuery('''
       SELECT c.id AS id, c.name AS name, c.phone AS phone,
              p.customerId AS pCustomerId, p.fatherName, p.cnic, p.phone2, p.address, p.occupation,
-             p.workAddress, p.monthlyIncome, p.note, p.createdAt, p.updatedAt, p.khataNo, p.blockedReason, p.blockedAt,
+             p.workAddress, p.monthlyIncome, p.note, p.createdAt, p.updatedAt, p.khataNo, p.openingBalance, p.openingDue, p.blockedReason, p.blockedAt,
              (SELECT COUNT(*) FROM inst_guarantors g WHERE g.customerId = c.id) AS gCount,
              (SELECT GROUP_CONCAT(i.idValues || ' ' || i.brand || ' ' || i.model, ' ')
                 FROM inst_plans pl JOIN inst_items i ON i.id = pl.itemId WHERE pl.customerId = c.id) AS itemKeys
@@ -137,6 +137,11 @@ class InstRepository {
       note: p.note.trim(),
       // FIX: khata no. yahan chhoot raha tha — form mein likhne ke baad bhi save khali hota tha.
       khataNo: p.khataNo.trim(),
+      // Purana baqi sirf Admin / Manager badal sakta hai (cashier ki edit purana wahi rakhti hai).
+      openingBalance: !Session.isAdminOrManager
+          ? (old?.openingBalance ?? 0)
+          : (p.openingBalance.isFinite && p.openingBalance > 0 ? p.openingBalance : 0),
+      openingDue: !Session.isAdminOrManager ? (old?.openingDue ?? 0) : (p.openingBalance > 0 ? p.openingDue : 0),
       createdAt: old?.createdAt ?? now,
       updatedAt: now,
     ).toMap();
@@ -362,7 +367,7 @@ class InstRepository {
   Future<int> saveItem(InstItem item) async {
     await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (item.model.trim().isEmpty) throw ArgumentError('Model / naam likhein.');
-    if (item.cashPrice < 0 || item.costPrice < 0) throw ArgumentError('Qeemat minus nahi ho sakti.');
+    if (item.cashPrice < 0 || item.costPrice < 0 || item.instPrice < 0) throw ArgumentError('Qeemat minus nahi ho sakti.');
     final db = await AppDatabase.instance.database;
     final cat = await db.query('inst_categories', where: 'id = ?', whereArgs: [item.categoryId], limit: 1);
     if (cat.isEmpty) throw ArgumentError('Category chunein.');

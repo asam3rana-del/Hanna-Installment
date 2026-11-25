@@ -258,6 +258,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
   late final _color = TextEditingController(text: _init?.color ?? '');
   late final _cost = TextEditingController(text: _num(_init?.costPrice));
   late final _cash = TextEditingController(text: _num(_init?.cashPrice));
+  late final _inst = TextEditingController(text: _num(_init?.instPrice)); // qist par farokht qeemat
   late final _warranty = TextEditingController(text: (_init?.warrantyMonths ?? 0) > 0 ? '${_init!.warrantyMonths}' : '');
   late final _supplier = TextEditingController(text: widget.existing?.supplier ?? '');
   late final _note = TextEditingController(text: widget.existing?.note ?? '');
@@ -307,7 +308,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [_brand, _model, _color, _cost, _cash, _warranty, _supplier, _note, ..._ids.values]) {
+    for (final c in [_brand, _model, _color, _cost, _cash, _inst, _warranty, _supplier, _note, ..._ids.values]) {
       c.dispose();
     }
     super.dispose();
@@ -350,6 +351,7 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
       idValues: {for (final n in names) n: _idCtrl(n).text},
       costPrice: Session.isAdminOrManager || widget.draft ? instParse(_cost.text) : (ex?.costPrice ?? 0),
       cashPrice: instParse(_cash.text),
+      instPrice: instParse(_inst.text),
       warrantyMonths: int.tryParse(_warranty.text.trim()) ?? 0,
       supplier: _supplier.text,
       note: _note.text,
@@ -526,6 +528,17 @@ class _InstItemFormScreenState extends State<InstItemFormScreen> {
               inputFormatters: money,
               onChanged: (_) => setState(() {}),
               decoration: instDeco(p, Loc.t('Cash sale price', 'نقد قیمت فروخت')),
+            ),
+            gap(),
+            TextField(
+              controller: _inst,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: money,
+              onChanged: (_) => setState(() {}),
+              decoration: instDeco(p, Loc.t('Installment sale price', 'قسط پر قیمت فروخت')).copyWith(
+                helperText: Loc.t('New installment plan fills this price itself (you can still change it)',
+                    'نئے قسط پلان میں یہ قیمت خود آ جائے گی (بدل بھی سکتے ہیں)'),
+              ),
             ),
             if (kShowProfitOutsideReports && Session.isAdminOrManager && cost > 0 && cash > 0)
               Padding(

@@ -13,6 +13,7 @@ const instPurchaseType = 'inst_purchase';
 const instSupplierPaymentType = 'inst_supplier_payment';
 const instCashSaleType = 'inst_cash_sale';
 const instPurchaseReturnType = 'inst_purchase_return';
+const instCustomerReceiptType = 'inst_customer_receipt';
 
 /// entityType -> Firestore collection.
 const Map<String, String> instPushCollections = {
@@ -29,6 +30,7 @@ const Map<String, String> instPushCollections = {
   instSupplierPaymentType: 'inst_supplier_payments',
   instCashSaleType: 'inst_cash_sales',
   instPurchaseReturnType: 'inst_purchase_returns',
+  instCustomerReceiptType: 'inst_customer_receipts',
 };
 
 /// Pull ki tarteeb = apply ki tarteeb (parent pehle).
@@ -41,6 +43,7 @@ const List<String> instPullCollections = [
   'inst_items',
   'inst_plans',
   'inst_payments',
+  'inst_customer_receipts', // purane baqi ki wasooli (customer ke baad)
   'inst_cash_sales', // item ke baad
   'inst_purchase_returns', // item + bill ke baad
   'inst_supplier_payments',

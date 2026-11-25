@@ -396,6 +396,7 @@ class _InstNewPurchaseScreenState extends State<InstNewPurchaseScreen> {
                             if (_items[i].primaryId.isNotEmpty) _items[i].primaryId,
                             '${Loc.t('Cost', 'لاگت')} ${instRs(_items[i].costPrice)}',
                             if (_items[i].cashPrice > 0) '${Loc.t('Cash', 'نقد')} ${instRs(_items[i].cashPrice)}',
+                            if (_items[i].instPrice > 0) '${Loc.t('Qist', 'قسط')} ${instRs(_items[i].instPrice)}',
                           ].where((x) => x.isNotEmpty).join('  •  '),
                           style: TextStyle(color: p.textMuted, fontSize: 12),
                         ),

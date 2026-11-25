@@ -13,6 +13,7 @@ import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
+import 'inst_opening_balance.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_collection_screens.dart';
 import 'inst_customers_screen.dart';
@@ -278,6 +279,8 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
             head(Loc.t('RECEIVE (MONEY IN)', 'لینا (رقم آئی)'), p.teal),
             item(Icons.request_quote_outlined, p.teal, Loc.t('Installment collection', 'قسط کی وصولی'),
                 Loc.t('Pick the customer, then Receive', 'کسٹمر چنیں، پھر وصول کریں'), const InstCollectionListScreen()),
+            item(Icons.history_edu_outlined, p.purple, Loc.t('Old balance (before software)', 'پرانا بقایا (سافٹ ویئر سے پہلے)'),
+                Loc.t('Customers who still owe old balance', 'جن کا پرانا بقایا باقی ہے'), const InstOpeningDueScreen()),
             ListTile(
               leading: CircleAvatar(backgroundColor: p.blue.withOpacity(0.14), child: Icon(Icons.south_west, color: p.blue)),
               title: Text(Loc.t('Other money in', 'دوسری رقم آئی'), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
@@ -487,6 +490,8 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
         _payReceive);
     final tCustomers = _Tile(Icons.people_alt_outlined, Loc.t('Customers', 'کسٹمرز'), Loc.t('All plans, history', 'سب پلان، ہسٹری'), p.purple,
         () => _push(const InstCustomersScreen()));
+    final tSuppliers = _Tile(Icons.storefront_outlined, Loc.t('Suppliers', 'سپلائرز'), Loc.t('Bills, payable, pay', 'بل، دینا ہے، ادائیگی'), p.red,
+        () => _push(const InstSuppliersScreen()));
     final tPurchases = _Tile(Icons.local_shipping_outlined, Loc.t('Purchase / Stock', 'خریداری / اسٹاک'), Loc.t('Buy -> stock auto', 'خریداری سے اسٹاک خود'), p.tealDark,
         () => _push(const InstPurchasesScreen()));
     final tStock = _Tile(Icons.inventory_2_outlined, Loc.t('Stock', 'اسٹاک'), Loc.t('Mobiles, bikes, LCDs...', 'موبائل، بائیک، ایل سی ڈی'), p.blue,
@@ -519,6 +524,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
       tNew,
       tPayRec,
       tCustomers,
+      if (mgr) tSuppliers, // customers ke saath suppliers bhi dashboard par
       mgr ? tPurchases : tStock,
       tCollection,
       if (kShowScan) tScan,
