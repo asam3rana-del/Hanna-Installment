@@ -36,3 +36,14 @@ se haath se bhi.
 - PC app "Download" dabane par Setup khud download karti hai, sha256 milati hai, chup chaap install karti hai
   (purani app band, nayi lag kar khud khulti hai). Data aur license wahi.
 - Link `.zip` ka ho to purani tarah browser mein khulta hai.
+
+## Khud-ba-khud publish (build.yml "publish_update")
+Ek dafa:
+1. GitHub > Settings (profile) > Developer settings > Personal access tokens > **Fine-grained tokens** > Generate new token.
+   Repository access: **Only select repositories > hanna-updates**. Permissions > Repository > **Contents: Read and write**.
+   Expiration: 1 saal. Generate > token copy (sirf ek dafa dikhta hai, kisi ko na bhejein).
+2. Hanna-Installment repo > Settings > Secrets and variables > Actions > New repository secret:
+   Name `UPDATES_TOKEN`, value = token.
+
+Har update: Actions > Build > Run workflow > **publish_update** tick + notes > Run. Green hone par release aur
+update.json khud ban jate hain. Naya code pehle apne phone / PC par test karein, phir tick wala run chalayein.
