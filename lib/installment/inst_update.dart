@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -40,6 +41,7 @@ class UpdateInfo {
 
   /// PC: link Setup (.exe) ka hai to app khud download karke chala sakti hai.
   bool get isWindowsInstaller => url.toLowerCase().split('?').first.endsWith('.exe');
+  bool get isApk => url.toLowerCase().split('?').first.endsWith('.apk');
 
   bool newerThan(int current) => build > current;
   bool requiredFor(int current) => current < minBuild && build > current;
@@ -174,13 +176,19 @@ class InstUpdate {
             actions: [
               if (!required) TextButton(onPressed: () => Navigator.pop(ctx), child: Text(Loc.t('Later', 'بعد میں'))),
               FilledButton.icon(
-                icon: const Icon(Icons.download),
-                label: Text(Loc.t('Download', 'ڈاؤن لوڈ')),
+                icon: const Icon(Icons.system_update_alt),
+                label: Text(Loc.t('Update now', 'ابھی اپڈیٹ کریں')),
                 onPressed: () async {
                   if (!kIsWeb && Platform.isWindows && info.isWindowsInstaller) {
                     // PC: Setup khud download + chala do (purani app band, nayi lag kar khud khulti hai; data wahi).
                     Navigator.pop(ctx);
                     await _installWindows(context, info);
+                    return;
+                  }
+                  if (!kIsWeb && Platform.isAndroid && info.isApk) {
+                    // Mobile: APK app ke andar download (Downloads mein nahi), phir seedha Android ka "Update" parda.
+                    Navigator.pop(ctx);
+                    await _installAndroid(context, info);
                     return;
                   }
                   final ok = await launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
@@ -199,10 +207,9 @@ class InstUpdate {
     }
   }
 
-  /// PC auto-update: Setup.exe temp mein (progress ke saath), SHA-256 mile to milao, phir chup chaap install
-  /// (`/VERYSILENT`) — installer purani app band karta hai, nayi files lagata hai aur app dobara kholta hai.
-  /// Data (AppData / Documents) aur license wahi rehte hain.
-  static Future<void> _installWindows(BuildContext context, UpdateInfo info) async {
+  /// Update file app ke apne temp folder mein download (progress dialog, Cancel), SHA-256 mile to milao.
+  /// Kamyab => file; Cancel => null; ghalti => throw. Progress dialog khud band hota hai.
+  static Future<File?> _download(BuildContext context, UpdateInfo info, String fileName) async {
     final progress = ValueNotifier<double>(0);
     var cancelled = false;
     var dialogOpen = true;
@@ -231,10 +238,17 @@ class InstUpdate {
         ],
       ),
     );
+    void closeDialog() {
+      if (dialogOpen && context.mounted) {
+        dialogOpen = false;
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}${Platform.pathSeparator}Hanna-Installment-Setup-${info.build}.exe');
+      final file = File('${dir.path}${Platform.pathSeparator}$fileName');
       final req = await client.getUrl(Uri.parse(info.url));
       final res = await req.close();
       if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
@@ -256,7 +270,13 @@ class InstUpdate {
         try {
           await file.delete();
         } catch (_) {}
-        return;
+        return null;
+      }
+      if (total > 0 && got != total) {
+        try {
+          await file.delete();
+        } catch (_) {}
+        throw const HttpException('Download incomplete (internet dropped)');
       }
       if (info.sha256.isNotEmpty && hashSink.value?.toString() != info.sha256) {
         try {
@@ -264,10 +284,31 @@ class InstUpdate {
         } catch (_) {}
         throw const FormatException('Downloaded file does not match (sha256) — not installed.');
       }
-      if (dialogOpen && context.mounted) {
-        dialogOpen = false;
-        Navigator.of(context, rootNavigator: true).pop(); // progress band
-      }
+      closeDialog();
+      return file;
+    } catch (_) {
+      closeDialog();
+      rethrow;
+    } finally {
+      client.close(force: true);
+      progress.dispose();
+    }
+  }
+
+  static Future<void> _failed(BuildContext context, UpdateInfo info, Object e) async {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(Loc.t('Update failed: $e — download it from the link instead.', 'اپڈیٹ ناکام: $e — لنک سے ڈاؤن لوڈ کریں۔'))));
+    await launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
+  }
+
+  /// PC auto-update: Setup.exe temp mein (progress ke saath), SHA-256 mile to milao, phir chup chaap install
+  /// (`/VERYSILENT`) — installer purani app band karta hai, nayi files lagata hai aur app dobara kholta hai.
+  /// Data (AppData / Documents) aur license wahi rehte hain.
+  static Future<void> _installWindows(BuildContext context, UpdateInfo info) async {
+    try {
+      final file = await _download(context, info, 'Hanna-Installment-Setup-${info.build}.exe');
+      if (file == null) return;
       await Process.start(
         file.path,
         ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
@@ -275,18 +316,31 @@ class InstUpdate {
       );
       exit(0); // installer purani app ki files badal sake
     } catch (e) {
-      if (context.mounted) {
-        if (dialogOpen) {
-          dialogOpen = false;
-          Navigator.of(context, rootNavigator: true).pop();
+      if (context.mounted) await _failed(context, info, e);
+    }
+  }
+
+  /// Mobile auto-update: APK app ke apne cache folder mein (user ko file dhoondni nahi parti, Downloads mein
+  /// kuch nahi), phir Android ka installer seedha "Update" parde ke saath. Android bina tasdeeq ke app
+  /// install nahi karne deta (Play Store ke ilawa) — is liye aakhir mein ek "Update" dabana zaroori hai.
+  /// Pehli dafa Android "is app ko install ki ijazat" maangta hai: on kar ke wapas aayein, phir dobara Update.
+  static Future<void> _installAndroid(BuildContext context, UpdateInfo info) async {
+    try {
+      // Purani update files saaf (jagah na ghere).
+      try {
+        final dir = await getTemporaryDirectory();
+        for (final f in dir.listSync()) {
+          if (f is File && f.path.endsWith('.apk') && f.path.contains('hanna-update-')) f.deleteSync();
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(Loc.t('Update failed: $e — download it from the link instead.', 'اپڈیٹ ناکام: $e — لنک سے ڈاؤن لوڈ کریں۔'))));
-        await launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
+      } catch (_) {}
+      final file = await _download(context, info, 'hanna-update-${info.build}.apk');
+      if (file == null) return;
+      final r = await OpenFilex.open(file.path, type: 'application/vnd.android.package-archive');
+      if (r.type != ResultType.done) {
+        throw Exception(r.message.isEmpty ? r.type.name : r.message);
       }
-    } finally {
-      client.close(force: true);
-      progress.dispose();
+    } catch (e) {
+      if (context.mounted) await _failed(context, info, e);
     }
   }
 }

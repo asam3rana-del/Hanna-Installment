@@ -200,7 +200,8 @@ for f in android/app/src/main/res/values/styles.xml android/app/src/main/res/val
 done
 
 # --- Background sync (SyncKeepAlive / flutter_foreground_task): app minimize hone par bhi sync chale. ---
-for perm in FOREGROUND_SERVICE FOREGROUND_SERVICE_DATA_SYNC POST_NOTIFICATIONS WAKE_LOCK; do
+# REQUEST_INSTALL_PACKAGES: app ke andar se update (lib/installment/inst_update.dart, open_filex se APK installer).
+for perm in FOREGROUND_SERVICE FOREGROUND_SERVICE_DATA_SYNC POST_NOTIFICATIONS WAKE_LOCK REQUEST_INSTALL_PACKAGES; do
   if ! grep -q "android.permission.$perm\"" "$MANIFEST"; then
     sed -i "0,/<manifest[^>]*>/s//&\n    <uses-permission android:name=\"android.permission.$perm\" \/>/" "$MANIFEST"
   fi
