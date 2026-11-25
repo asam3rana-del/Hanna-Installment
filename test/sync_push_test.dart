@@ -11,7 +11,7 @@ void main() {
 
   group('collectionFor / ops', () {
     test('20 Kotlin entity types + 4 Workers + 2 Shop Rents + 2 Utility Bills + 1 Due Follow-ups; anjaan => null', () {
-      expect(pushCollections.length, 42);
+      expect(pushCollections.length, 43); // +inst_customer_receipts (v49)
       expect(collectionFor('due_followup'), 'due_followups');
       expect(collectionFor('worker'), 'workers');
       expect(collectionFor('worker_attendance'), 'worker_attendance');
