@@ -385,7 +385,12 @@ class SettingsSync {
 /// Dobara bulana mehfooz hai.
 void installSyncWiring() {
   // PC (Windows): Firebase ka C++ SDK sync mein app gira deta tha — wahan REST backend (koi native code nahi).
-  SyncRepository.backend = Platform.isWindows ? RestSyncApi.instance : SyncApi.instance;
+  // (if/else: dono SyncBackend + SyncHeartbeat hain, ternary ka type Object ban jata tha)
+  if (Platform.isWindows) {
+    SyncRepository.backend = RestSyncApi.instance;
+  } else {
+    SyncRepository.backend = SyncApi.instance;
+  }
   SyncRepository.afterApply = (db) async {
     await SyncQueueHelper.mergeOwnDuplicateExpenses(db);
   };
