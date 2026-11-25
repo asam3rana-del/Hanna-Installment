@@ -457,6 +457,20 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
     Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
   }
 
+  /// Update download chal raha ho to Home par back dabane se app band nahi hoti (download toot jata tha) —
+  /// sirf peeche chali jati hai, download chalta rehta hai.
+  Widget _updateBackGuard(Widget child) => ValueListenableBuilder<double?>(
+        valueListenable: InstUpdate.downloading,
+        builder: (_, v, c) => PopScope(
+          canPop: v == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && InstUpdate.busy) InstUpdate.moveAppToBack();
+          },
+          child: c!,
+        ),
+        child: child,
+      );
+
   @override
   Widget build(BuildContext context) {
     final p = ThemeManager.palette;
@@ -564,7 +578,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
             () => _push(const InstPlansScreen())),
       ),
     ]);
-    return Scaffold(
+    return _updateBackGuard(Scaffold(
       backgroundColor: p.bg,
       body: Column(children: [
         instHeader(
@@ -658,7 +672,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
           ),
         ),
       ]),
-    );
+    ));
   }
 
   Widget _tapStat(AppPalette p, String label, String value, String sub, Color c, VoidCallback onTap) => InkWell(

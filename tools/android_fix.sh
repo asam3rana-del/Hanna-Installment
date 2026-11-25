@@ -308,6 +308,16 @@ class MainActivity : FlutterFragmentActivity() {
         setupUsbChannel(flutterEngine)
         setupBtChannel(flutterEngine)
         setupWaChannel(flutterEngine)
+        // App update download ke dauran Home par back: app band nahi, sirf peeche (lib/installment/inst_update.dart).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "ah_developer/app")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "moveToBack") {
+                    moveTaskToBack(true)
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
+            }
     }
 
     // ---- USB thermal printer (Kotlin PrinterHelper USB hissa: host mode, bulk OUT endpoint). Plugin nahi. ----

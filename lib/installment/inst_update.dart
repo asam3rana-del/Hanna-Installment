@@ -4,12 +4,15 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_info.dart';
+import '../services/due_alert_service.dart';
 import '../utils/loc.dart';
 
 /// App ke andar "naya update aaya hai" (Play Store ke baghair).
@@ -77,6 +80,28 @@ class InstUpdate {
   static const _kLast = 'inst_update_last_check';
   static const _every = Duration(hours: 6);
   static bool _showing = false;
+
+  /// Chalta hua update download: null = kuch nahi, warna 0..1 (0 = shuru, size pata nahi).
+  /// Download screen / dialog se azad hai — user back kare, doosri app khole, phir bhi chalta rehta hai.
+  static final ValueNotifier<double?> downloading = ValueNotifier<double?>(null);
+  static bool get busy => downloading.value != null;
+  static bool _cancel = false;
+
+  /// Download poora hua magar app us waqt peeche thi (Android peeche se installer kholne nahi deta):
+  /// app wapas saamne aate hi installer khulega.
+  static String? _readyApk;
+  static _UpdateLifecycle? _lifecycle;
+
+  static const _appChannel = MethodChannel('ah_developer/app');
+  static const _notifId = 7401;
+  static const _notifChannel = 'app_update';
+
+  /// Home par back: update chal raha ho to app band nahi, sirf peeche (download na toote).
+  static Future<void> moveAppToBack() async {
+    try {
+      await _appChannel.invokeMethod<void>('moveToBack');
+    } catch (_) {}
+  }
 
   /// CI build number (local / purani build par 0).
   static int get currentBuild => int.tryParse(AppInfo.build) ?? 0;
@@ -179,6 +204,11 @@ class InstUpdate {
                 icon: const Icon(Icons.system_update_alt),
                 label: Text(Loc.t('Update now', 'ابھی اپڈیٹ کریں')),
                 onPressed: () async {
+                  if (busy) {
+                    Navigator.pop(ctx);
+                    _showProgress(context);
+                    return;
+                  }
                   if (!kIsWeb && Platform.isWindows && info.isWindowsInstaller) {
                     // PC: Setup khud download + chala do (purani app band, nayi lag kar khud khulti hai; data wahi).
                     Navigator.pop(ctx);
@@ -207,44 +237,97 @@ class InstUpdate {
     }
   }
 
-  /// Update file app ke apne temp folder mein download (progress dialog, Cancel), SHA-256 mile to milao.
-  /// Kamyab => file; Cancel => null; ghalti => throw. Progress dialog khud band hota hai.
-  static Future<File?> _download(BuildContext context, UpdateInfo info, String fileName) async {
-    final progress = ValueNotifier<double>(0);
-    var cancelled = false;
-    var dialogOpen = true;
+  /// Progress dialog (sirf dikhawa): "Background mein" / back = dialog band, download chalta rahe; "Cancel" = rok do.
+  static void _showProgress(BuildContext context) {
+    if (!context.mounted) return;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(Loc.t('Downloading update...', 'اپڈیٹ ڈاؤن لوڈ ہو رہا ہے...')),
-        content: ValueListenableBuilder<double>(
-          valueListenable: progress,
-          builder: (_, v, __) => Column(mainAxisSize: MainAxisSize.min, children: [
-            LinearProgressIndicator(value: v > 0 ? v : null),
-            const SizedBox(height: 8),
-            Text(v > 0 ? '${(v * 100).round()}%' : ''),
-          ]),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              cancelled = true;
-              dialogOpen = false;
-              Navigator.pop(ctx);
-            },
-            child: Text(Loc.t('Cancel', 'منسوخ')),
-          ),
-        ],
+      builder: (ctx) => ValueListenableBuilder<double?>(
+        valueListenable: downloading,
+        builder: (_, v, __) {
+          if (v == null) {
+            // Download khatam / ruk gaya: dialog khud band.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (ctx.mounted && Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+            });
+          }
+          return AlertDialog(
+            title: Text(Loc.t('Downloading update...', 'اپڈیٹ ڈاؤن لوڈ ہو رہا ہے...')),
+            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              LinearProgressIndicator(value: (v ?? 0) > 0 ? v : null),
+              const SizedBox(height: 8),
+              Text((v ?? 0) > 0 ? '${((v ?? 0) * 100).round()}%' : ''),
+              const SizedBox(height: 8),
+              Text(
+                Loc.t('You can go back or use other apps — the update keeps downloading. It will ask to install when ready.',
+                    'آپ واپس جا سکتے ہیں یا کوئی اور ایپ استعمال کر سکتے ہیں — اپڈیٹ ڈاؤن لوڈ ہوتا رہے گا۔ تیار ہونے پر انسٹال پوچھے گا۔'),
+                style: const TextStyle(fontSize: 12.5),
+              ),
+            ]),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  _cancel = true;
+                  Navigator.pop(ctx);
+                },
+                child: Text(Loc.t('Cancel', 'منسوخ')),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(Loc.t('Run in background', 'پیچھے چلنے دیں')),
+              ),
+            ],
+          );
+        },
       ),
     );
-    void closeDialog() {
-      if (dialogOpen && context.mounted) {
-        dialogOpen = false;
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
+  }
 
+  /// Android notification: download ka progress (ya "tayyar — install ke liye dabayein").
+  static Future<void> _notify(String title, String body, {int? percent}) async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      await DueAlertService.init();
+      await DueAlertService.plugin.show(
+        _notifId,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _notifChannel,
+            'App update',
+            channelDescription: 'Hanna Installment update download',
+            importance: percent == null ? Importance.high : Importance.low,
+            priority: percent == null ? Priority.high : Priority.low,
+            onlyAlertOnce: true,
+            ongoing: percent != null,
+            autoCancel: percent == null,
+            showProgress: percent != null,
+            maxProgress: 100,
+            progress: percent ?? 0,
+            indeterminate: percent != null && percent <= 0,
+          ),
+        ),
+      );
+    } catch (_) {}
+  }
+
+  static Future<void> _clearNotify() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      await DueAlertService.plugin.cancel(_notifId);
+    } catch (_) {}
+  }
+
+  /// Update file app ke apne temp folder mein download — screen se azad (back / doosri app par bhi chalta rahe;
+  /// Android par app ko SyncKeepAlive ki foreground service zinda rakhti hai). SHA-256 mile to milao.
+  /// Kamyab => file; Cancel => null; ghalti => throw.
+  static Future<File?> _download(BuildContext context, UpdateInfo info, String fileName) async {
+    _cancel = false;
+    downloading.value = 0;
+    _showProgress(context);
+    await _notify(Loc.t('Downloading update...', 'اپڈیٹ ڈاؤن لوڈ ہو رہا ہے...'), '${AppInfo.appName} build ${info.build}', percent: 0);
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
       final dir = await getTemporaryDirectory();
@@ -255,21 +338,30 @@ class InstUpdate {
       final total = res.contentLength;
       final sink = file.openWrite();
       var got = 0;
+      var lastPct = -1;
       final hashSink = _DigestSink();
       final hasher = crypto.sha256.startChunkedConversion(hashSink);
       await for (final chunk in res) {
-        if (cancelled) break;
+        if (_cancel) break;
         sink.add(chunk);
         hasher.add(chunk);
         got += chunk.length;
-        if (total > 0) progress.value = got / total;
+        if (total > 0) {
+          downloading.value = got / total;
+          final pct = (got * 100 ~/ total);
+          if (pct >= lastPct + 5) {
+            lastPct = pct;
+            await _notify(Loc.t('Downloading update...', 'اپڈیٹ ڈاؤن لوڈ ہو رہا ہے...'), '$pct%', percent: pct);
+          }
+        }
       }
       await sink.close();
       hasher.close();
-      if (cancelled) {
+      if (_cancel) {
         try {
           await file.delete();
         } catch (_) {}
+        await _clearNotify();
         return null;
       }
       if (total > 0 && got != total) {
@@ -284,19 +376,21 @@ class InstUpdate {
         } catch (_) {}
         throw const FormatException('Downloaded file does not match (sha256) — not installed.');
       }
-      closeDialog();
       return file;
     } catch (_) {
-      closeDialog();
+      await _clearNotify();
       rethrow;
     } finally {
       client.close(force: true);
-      progress.dispose();
+      downloading.value = null;
     }
   }
 
   static Future<void> _failed(BuildContext context, UpdateInfo info, Object e) async {
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      await _notify(Loc.t('Update failed', 'اپڈیٹ ناکام'), Loc.t('Open the app and try again.', 'ایپ کھول کر دوبارہ کوشش کریں۔'));
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(Loc.t('Update failed: $e — download it from the link instead.', 'اپڈیٹ ناکام: $e — لنک سے ڈاؤن لوڈ کریں۔'))));
     await launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
@@ -316,17 +410,17 @@ class InstUpdate {
       );
       exit(0); // installer purani app ki files badal sake
     } catch (e) {
-      if (context.mounted) await _failed(context, info, e);
+      await _failed(context, info, e);
     }
   }
 
-  /// Mobile auto-update: APK app ke apne cache folder mein (user ko file dhoondni nahi parti, Downloads mein
-  /// kuch nahi), phir Android ka installer seedha "Update" parde ke saath. Android bina tasdeeq ke app
-  /// install nahi karne deta (Play Store ke ilawa) — is liye aakhir mein ek "Update" dabana zaroori hai.
-  /// Pehli dafa Android "is app ko install ki ijazat" maangta hai: on kar ke wapas aayein, phir dobara Update.
+  /// Mobile auto-update: APK app ke apne cache folder mein (Downloads mein kuch nahi), phir Android ka "Update"
+  /// parda. User beech mein back kare / doosri app khole to download chalta rehta hai; tayyar hone par app saamne
+  /// ho to foran installer, warna notification "install ke liye dabayein" aur app khulte hi installer.
+  /// Android bina tasdeeq ke install nahi karne deta — aakhir mein ek "Update" dabana zaroori hai.
   static Future<void> _installAndroid(BuildContext context, UpdateInfo info) async {
+    _lifecycle ??= _UpdateLifecycle()..attach();
     try {
-      // Purani update files saaf (jagah na ghere).
       try {
         final dir = await getTemporaryDirectory();
         for (final f in dir.listSync()) {
@@ -335,13 +429,43 @@ class InstUpdate {
       } catch (_) {}
       final file = await _download(context, info, 'hanna-update-${info.build}.apk');
       if (file == null) return;
-      final r = await OpenFilex.open(file.path, type: 'application/vnd.android.package-archive');
-      if (r.type != ResultType.done) {
-        throw Exception(r.message.isEmpty ? r.type.name : r.message);
+      final front = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      if (front) {
+        await _clearNotify();
+        await _openInstaller(file.path);
+      } else {
+        _readyApk = file.path;
+        await _notify(Loc.t('Update ready', 'اپڈیٹ تیار ہے'),
+            Loc.t('Tap to install ${AppInfo.appName} build ${info.build}', '${AppInfo.appName} build ${info.build} انسٹال کرنے کے لیے دبائیں'));
       }
     } catch (e) {
-      if (context.mounted) await _failed(context, info, e);
+      await _failed(context, info, e);
     }
+  }
+
+  static Future<void> _openInstaller(String path) async {
+    final r = await OpenFilex.open(path, type: 'application/vnd.android.package-archive');
+    if (r.type != ResultType.done) throw Exception(r.message.isEmpty ? r.type.name : r.message);
+  }
+
+  /// App wapas saamne: tayyar APK ho to installer.
+  static Future<void> _onResumed() async {
+    final path = _readyApk;
+    if (path == null) return;
+    _readyApk = null;
+    await _clearNotify();
+    try {
+      if (File(path).existsSync()) await _openInstaller(path);
+    } catch (_) {}
+  }
+}
+
+class _UpdateLifecycle with WidgetsBindingObserver {
+  void attach() => WidgetsBinding.instance.addObserver(this);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) InstUpdate._onResumed();
   }
 }
 
