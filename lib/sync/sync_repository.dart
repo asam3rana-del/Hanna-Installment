@@ -19,6 +19,18 @@ class SyncRepository {
 
   static const String prefsLastSync = 'sync_prefs.last_sync_time';
 
+  /// Aakhri kamyab pull ke waqt ka heartbeat ([SyncHeartbeat]).
+  static const String prefsLastHeartbeat = 'sync_prefs.last_heartbeat';
+
+  /// Aakhri poori pull kab hui (ms).
+  static const String prefsLastFullPull = 'sync_prefs.last_full_pull';
+
+  /// Heartbeat wahi ho tab bhi itni der baad ek poori pull (koi purana build heartbeat na badle to bhi data aaye).
+  static const int fullPullEveryMs = 60 * 60 * 1000;
+
+  /// Agli sync heartbeat dekhe baghair poori pull kare (Settings > Sync Now).
+  static bool forceNextPull = false;
+
   /// Push ki had per cycle (Kotlin `pending(limit = 200)`).
   static const int pushBatchLimit = 200;
 
@@ -47,6 +59,7 @@ class SyncRepository {
   static Future<void> resetSyncCheckpoint(int timestampMillis) async {
     final p = await SharedPreferences.getInstance();
     await p.setInt(prefsLastSync, timestampMillis);
+    await p.remove(prefsLastHeartbeat); // agli sync zaroor poori pull kare
   }
 
   static Future<int> lastSyncTime() async {
@@ -155,9 +168,41 @@ class SyncRepository {
       }
     }
 
+    final hbApi = api is SyncHeartbeat ? api as SyncHeartbeat : null;
+    if (pushed > 0 && hbApi != null) {
+      // Doosre devices ko batao ke naya data aaya (na ho saka to wo ghante wali poori pull mein le lenge).
+      try {
+        await hbApi.bumpHeartbeat().timeout(const Duration(seconds: 15));
+      } catch (_) {}
+    }
+
     // ---- 2. PULL ----
     final p = await SharedPreferences.getInstance();
     final since = p.getInt(prefsLastSync) ?? 0;
+
+    // Sasta check: cloud par kisi ne kuch nahi badla to poori pull (har collection ki query) chhor do.
+    final force = forceNextPull;
+    forceNextPull = false;
+    String? heartbeat;
+    if (hbApi != null) {
+      try {
+        heartbeat = await hbApi.readHeartbeat().timeout(const Duration(seconds: 20));
+      } catch (_) {
+        heartbeat = null; // rules mein branch_sync nahi / net: pehle jaisi poori pull
+      }
+    }
+    final lastFull = p.getInt(prefsLastFullPull) ?? 0;
+    final sinceFull = nowMs() - lastFull;
+    if (!force &&
+        heartbeat != null &&
+        heartbeat.isNotEmpty &&
+        since > 0 &&
+        heartbeat == p.getString(prefsLastHeartbeat) &&
+        sinceFull >= 0 &&
+        sinceFull < fullPullEveryMs) {
+      await queue.pruneSynced(nowMs() - pruneAfterMs);
+      return SyncResult(pushedCount: pushed, failedCount: failed, pulledOk: true, pushError: pushBlocked);
+    }
 
     final pullStartedAt = nowMs();
     final PullResult changes;
@@ -192,6 +237,12 @@ class SyncRepository {
     // baqi devices ke docs skip hote the. Checkpoint kabhi is pull ke start se aage nahi.
     final checkpoint = changes.serverTime < pullStartedAt ? changes.serverTime : pullStartedAt;
     await p.setInt(prefsLastSync, checkpoint);
+    await p.setInt(prefsLastFullPull, nowMs());
+    if (heartbeat != null && heartbeat.isNotEmpty) {
+      await p.setString(prefsLastHeartbeat, heartbeat);
+    } else {
+      await p.remove(prefsLastHeartbeat);
+    }
 
     // Safai: 7 din se purani synced queue rows.
     await queue.pruneSynced(nowMs() - pruneAfterMs);

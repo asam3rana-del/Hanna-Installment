@@ -18,8 +18,8 @@ import 'cloud_config_store.dart';
 ///
 ///  * Auth: Identity Toolkit `accounts:signUp` (anonymous) + Secure Token refresh. UID / refresh token
 ///    SharedPreferences mein (project ke hisaab se) — PC ki "Device ID" yahi UID hai.
-///  * Firestore: documents GET, `runQuery`, `beginTransaction` / `commit` (transaction ABORTED par 5 dafa
-///    dobara), `rollback`.
+///  * Firestore: documents GET, `runQuery`, `commit` preconditions ke saath (takrao par 5 dafa
+///    dobara).
 
 /// REST ki ghalti — `code` Firebase SDK jaisa ('permission-denied', 'unavailable', 'resource-exhausted'...),
 /// taake `isNetworkError` / `isQuotaError` / `isPermissionDenied` wahi kaam karein.
@@ -185,7 +185,10 @@ class RestDoc {
   final String id;
   final bool exists;
   final Map<String, Object?>? _data;
-  const RestDoc(this.id, this.exists, this._data);
+
+  /// Server ka `updateTime` (RFC3339) — transaction precondition ke liye. Na ho to null.
+  final String? updateTime;
+  const RestDoc(this.id, this.exists, this._data, [this.updateTime]);
 
   /// SDK `DocumentSnapshot.data()` jaisa (na ho to null).
   Map<String, Object?>? data() => _data;
@@ -194,21 +197,33 @@ class RestDoc {
     final name = json['name']?.toString() ?? '';
     final id = Uri.decodeComponent(name.split('/').last);
     final f = json['fields'];
-    return RestDoc(id, true, f is Map ? decodeFields(f) : <String, Object?>{});
+    return RestDoc(id, true, f is Map ? decodeFields(f) : <String, Object?>{}, json['updateTime']?.toString());
   }
 }
 
-/// Transaction ke andar: reads `transaction` ke saath, writes jama ho kar commit par.
+/// Transaction ke andar (phone ke Firebase SDK jaisa "optimistic" tareeqa):
+/// reads aam GET se, aur har likhe gaye document par commit ke waqt precondition lagti hai — document
+/// tab bhi waisa hi ho jaisa parha tha (updateTime wahi, ya tab bhi maujood na ho). Beech mein kisi aur ne
+/// badla to commit FAILED_PRECONDITION deta hai aur poori body dobara chalti hai.
+///
+/// FIX: pehle `:beginTransaction` istemal hota tha — Firebase Auth (rules wale) user ke liye server use
+/// "Missing or insufficient permissions" se rad kar deta hai, is liye PC ka har push ruk jata tha
+/// (pull chalta rehta tha kyunke wo transaction nahi karta).
 class RestTx {
-  RestTx._(this._fs, this.id, this.project);
+  RestTx._(this._fs, this.project);
   final FirestoreRest _fs;
-  final String id;
   final String project;
   final List<Map<String, Object?>> writes = [];
 
+  /// docName -> parhte waqt ka updateTime ('' = maujood nahi tha).
+  final Map<String, String> _seen = {};
+  final Set<String> _guarded = {};
+
   Future<RestDoc> get(String collection, String docId) async {
     try {
-      return await _fs.getDoc(collection, docId, transaction: id);
+      final d = await _fs.getDoc(collection, docId);
+      _seen[_fs.docName(project, collection, docId)] = d.exists ? (d.updateTime ?? '') : '';
+      return d;
     } on RestFirebaseException catch (e) {
       // Sync History mein saaf likha aaye ke parhne mein ruka (kis document par).
       throw RestFirebaseException(e.code, '${e.message} [read $collection/$docId]', e.status);
@@ -217,7 +232,14 @@ class RestTx {
 
   /// `tx.set(ref, map, SetOptions(merge: true))` (merge) ya `SetOptions(mergeFields: [...])`.
   void set(String collection, String docId, Map<String, Object?> map, {bool merge = false, List<String>? mergeFields}) {
-    writes.add(_fs.updateWrite(project, collection, docId, map, merge: merge, mergeFields: mergeFields));
+    final w = _fs.updateWrite(project, collection, docId, map, merge: merge, mergeFields: mergeFields);
+    final name = _fs.docName(project, collection, docId);
+    final seen = _seen[name];
+    // Precondition sirf pehli write par (usi commit ki doosri write ke waqt document badal chuka hota hai).
+    if (seen != null && _guarded.add(name)) {
+      w['currentDocument'] = seen.isEmpty ? {'exists': false} : {'updateTime': seen};
+    }
+    writes.add(w);
   }
 }
 
@@ -520,31 +542,21 @@ class FirestoreRest {
         body: jsonEncode({'writes': writes, if (transaction != null) 'transaction': transaction}));
   }
 
-  /// `runTransaction` jaisa: body padhti hai, writes jama karti hai; commit ABORTED (takrao) ho to dobara
-  /// (zyada se zyada 5 dafa, thore wagfe se). Body ki apni ghalti par rollback aur wahi ghalti aage.
+  /// `runTransaction` jaisa: body padhti hai, writes jama karti hai, phir ek commit (preconditions ke saath).
+  /// Takrao (FAILED_PRECONDITION / ABORTED) par body dobara — zyada se zyada 5 dafa, thore wagfe se.
   Future<T> runTransaction<T>(Future<T> Function(RestTx tx) body) async {
     final c = await _config();
     final rnd = math.Random();
     for (var attempt = 1;; attempt++) {
-      final begin = await _send('POST', Uri.parse('${_base(c.projectId)}:beginTransaction'),
-          body: jsonEncode({
-            'options': {'readWrite': <String, Object?>{}}
-          }));
-      final txId = begin is Map ? begin['transaction']?.toString() : null;
-      if (txId == null || txId.isEmpty) throw const RestFirebaseException('unknown', 'beginTransaction: no id');
-      final tx = RestTx._(this, txId, c.projectId);
-      T result;
+      final tx = RestTx._(this, c.projectId);
+      final result = await body(tx);
+      if (tx.writes.isEmpty) return result;
       try {
-        result = await body(tx);
-      } catch (_) {
-        await _rollbackQuietly(c.projectId, txId);
-        rethrow;
-      }
-      try {
-        await commit(tx.writes, transaction: txId);
+        await commit(tx.writes);
         return result;
       } on RestFirebaseException catch (e) {
-        if (e.code != 'aborted' || attempt >= 5) {
+        final conflict = e.code == 'aborted' || e.code == 'failed-precondition';
+        if (!conflict || attempt >= 5) {
           // Likhne mein ruka: kaun sa document aur kaun se fields (rules ki jaanch ke liye).
           final what = [
             for (final w in tx.writes)
@@ -557,12 +569,6 @@ class FirestoreRest {
         await Future<void>.delayed(Duration(milliseconds: 200 * attempt + rnd.nextInt(300)));
       }
     }
-  }
-
-  Future<void> _rollbackQuietly(String project, String txId) async {
-    try {
-      await _send('POST', Uri.parse('${_base(project)}:rollback'), body: jsonEncode({'transaction': txId}));
-    } catch (_) {}
   }
 
   /// Naya document (auto id) — crash report jaisi cheezon ke liye.

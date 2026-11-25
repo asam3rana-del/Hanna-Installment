@@ -217,6 +217,7 @@ class SettingsSync {
   /// warna sync chalao aur natija ka summary lautao ("Sync complete" jab summary khali ho).
   static Future<String?> syncNow() async {
     if (!await isOnline()) return null;
+    SyncRepository.forceNextPull = true; // haath se Sync Now: hamesha poori pull
     final o = await SyncWorker.instance.syncNowOnce();
     if (o.summary.isNotEmpty) return o.summary;
     return o.success ? 'Sync complete' : 'Sync failed';

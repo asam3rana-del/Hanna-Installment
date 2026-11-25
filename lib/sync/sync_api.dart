@@ -30,7 +30,7 @@ import 'sync_types.dart';
 /// STATUS: HEADER + PUSH + PULL + APPLY (hissa 1 + 2, sab 20 collections) + branch cleanup
 /// (count/delete) — `SyncApi.kt` mukammal. Wiring `installSyncWiring()` (settings_sync.dart) se main() mein
 /// hoti hai: `SyncRepository.backend = SyncApi.instance`, `afterApply = mergeOwnDuplicateExpenses`.
-class SyncApi implements SyncBackend {
+class SyncApi implements SyncBackend, SyncHeartbeat {
   SyncApi._();
   static final SyncApi instance = SyncApi._();
 
@@ -58,6 +58,33 @@ class SyncApi implements SyncBackend {
     final app = await CloudConfigStore.firebaseApp();
     if (app == null) return null;
     return FirebaseAuth.instanceFor(app: app).currentUser?.uid;
+  }
+
+  // ---------------------------------------------------------------- HEARTBEAT ([SyncHeartbeat])
+
+  @override
+  Future<String> readHeartbeat() async {
+    final fs = await firestoreFor();
+    if (fs == null) throw StateError('cloud not ready');
+    final branch = BranchConfigStore.current;
+    final snap = await fs.collection(heartbeatCollection).doc(branch).get(const GetOptions(source: Source.server));
+    if (!snap.exists) return '';
+    final m = snap.data() ?? const <String, dynamic>{};
+    final at = m['at'];
+    final atS = at is Timestamp ? at.millisecondsSinceEpoch.toString() : '$at';
+    return '$atS|${m['n']}';
+  }
+
+  @override
+  Future<void> bumpHeartbeat() async {
+    final fs = await firestoreFor();
+    if (fs == null) return;
+    final branch = BranchConfigStore.current;
+    await fs.collection(heartbeatCollection).doc(branch).set({
+      'branchId': branch,
+      'at': DateTime.now().millisecondsSinceEpoch,
+      'n': DateTime.now().microsecondsSinceEpoch % 1000000007,
+    });
   }
 
   /// Kotlin `firestoreFor`: branch configure nahi / cloud project nahi / sign-in nahi ho saka => null

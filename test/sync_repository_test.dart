@@ -48,6 +48,29 @@ class FakeBackend implements SyncBackend {
   String permissionDeniedMessage() => 'denied!';
 }
 
+/// Heartbeat wala fake: `hb` cloud ka marker; push par badalta hai.
+class HeartbeatFake extends FakeBackend implements SyncHeartbeat {
+  String hb = 'h1';
+  int pulls = 0;
+  bool readFails = false;
+  HeartbeatFake({super.result});
+
+  @override
+  Future<PullResult> pull(int since) {
+    pulls++;
+    return super.pull(since);
+  }
+
+  @override
+  Future<String> readHeartbeat() async {
+    if (readFails) throw StateError('rules');
+    return hb;
+  }
+
+  @override
+  Future<void> bumpHeartbeat() async => hb = '${hb}x';
+}
+
 Future<Database> _memDb() async {
   final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
   await db.execute('''
@@ -143,6 +166,7 @@ void main() {
     });
     tearDown(() async {
       SyncRepository.backend = null;
+      SyncRepository.forceNextPull = false;
       await db.close();
     });
 
@@ -188,6 +212,40 @@ void main() {
       await SyncRepository.resetSyncCheckpoint(1234);
       await SyncRepository.syncNow();
       expect(fake.pulledSince, 1234);
+    });
+
+    test('heartbeat: cloud par kuch naya nahi => poori pull nahi; badla / push / Sync Now => pull', () async {
+      final fake = HeartbeatFake(result: PullResult(serverTime: 9000));
+      SyncRepository.backend = fake;
+      await SyncRepository.syncNow(); // pehli dafa: poori pull
+      expect(fake.pulls, 1);
+      final r = await SyncRepository.syncNow(); // kuch nahi badla: skip
+      expect(fake.pulls, 1);
+      expect(r.pulledOk, isTrue);
+      expect(r.summary(), 'Already up to date');
+      fake.hb = 'h2'; // doosre device ne push kiya
+      await SyncRepository.syncNow();
+      expect(fake.pulls, 2);
+      await q.enqueue(_e('mine'));
+      await SyncRepository.syncNow(); // apna push => heartbeat badla => pull
+      expect(fake.pushed, ['mine']);
+      expect(fake.pulls, 3);
+      SyncRepository.forceNextPull = true;
+      await SyncRepository.syncNow();
+      expect(fake.pulls, 4);
+      fake.readFails = true; // rules mein branch_sync nahi => hamesha pull
+      await SyncRepository.syncNow();
+      expect(fake.pulls, 5);
+    });
+
+    test('heartbeat: ghanta guzar jaye to wahi heartbeat hone par bhi poori pull', () async {
+      final fake = HeartbeatFake(result: PullResult(serverTime: 9000));
+      SyncRepository.backend = fake;
+      await SyncRepository.syncNow();
+      final t0 = SyncRepository.nowMs();
+      SyncRepository.nowMs = () => t0 + SyncRepository.fullPullEveryMs + 1;
+      await SyncRepository.syncNow();
+      expect(fake.pulls, 2);
     });
 
     test('branch code nahi => pulledOk false, checkpoint/apply nahi, push phir bhi hua', () async {

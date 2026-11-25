@@ -22,7 +22,7 @@ import 'sync_types.dart';
 /// `pushedAt` se der wali entries.
 ///
 /// FARQ: secure staff mode (callable functions) PC par nahi — Hanna Installment mein waise bhi band hai.
-class RestSyncApi implements SyncBackend {
+class RestSyncApi implements SyncBackend, SyncHeartbeat {
   RestSyncApi._();
   static final RestSyncApi instance = RestSyncApi._();
 
@@ -260,6 +260,34 @@ class RestSyncApi implements SyncBackend {
       if (denied) throw SyncPermissionDeniedException(msg);
       throw SyncPushException(msg);
     }
+  }
+
+  // ---------------------------------------------------------------- HEARTBEAT
+
+  @override
+  Future<String> readHeartbeat() async {
+    if (!await _ready()) throw StateError('cloud not ready');
+    final branch = BranchConfigStore.current;
+    if (branch.trim().isEmpty) throw StateError('no branch');
+    final d = await _fs.getDoc(heartbeatCollection, branch);
+    if (!d.exists) return '';
+    final m = d.data() ?? const {};
+    return '${m['at']}|${m['n']}';
+  }
+
+  @override
+  Future<void> bumpHeartbeat() async {
+    if (!await _ready()) return;
+    final branch = BranchConfigStore.current;
+    if (branch.trim().isEmpty) return;
+    final project = await _fs.projectId();
+    await _fs.commit([
+      _fs.updateWrite(project, heartbeatCollection, branch, {
+        'branchId': branch,
+        'at': nowMs(),
+        'n': DateTime.now().microsecondsSinceEpoch % 1000000007,
+      }),
+    ]);
   }
 
   // ---------------------------------------------------------------- PULL
