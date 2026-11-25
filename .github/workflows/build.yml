@@ -428,12 +428,14 @@ jobs:
           set -e
           SHA_FILE=$(gh api "repos/$UPDATES_REPO/contents/update.json" --jq .sha 2>/dev/null || echo "")
           export WIN_SHA=$(tr -d ' \r\n' < dist/sha256.txt)
+          export APK_SHA=$(sha256sum dist/app-release.apk | cut -d' ' -f1)
           python3 - <<'PY'
           import json, os
           b = int(os.environ["BUILD"]); repo = os.environ["UPDATES_REPO"]; notes = os.environ.get("NOTES", "")
           base = f"https://github.com/{repo}/releases/download/build-{b}/"
           data = {
-            "android": {"version": f"1.0.{b}", "build": b, "url": base + "app-release.apk", "notes": notes},
+            "android": {"version": f"1.0.{b}", "build": b, "url": base + "app-release.apk",
+                        "sha256": os.environ["APK_SHA"], "notes": notes},
             "windows": {"version": f"1.0.{b}", "build": b, "url": base + "Hanna-Installment-Setup.exe",
                         "sha256": os.environ["WIN_SHA"], "notes": notes},
             "min_build": 0,
