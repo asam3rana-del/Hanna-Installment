@@ -420,19 +420,22 @@ class InstPlanRepository {
     if (amount <= 0 && fine <= 0 && discount <= 0) throw ArgumentError('Raqam likhein.');
     if (discount > 0 && !Session.isAdminOrManager) throw ArgumentError('Discount sirf Admin / Manager de sakta hai.');
     if (method != 'cash' && method != 'bank') throw ArgumentError('Cash ya Bank chunein.');
-    final v = await view(planId);
-    if (v == null) throw ArgumentError('Plan nahi mila.');
-    if (!v.plan.isActive) throw ArgumentError('Ye plan band hai (${v.plan.status}).');
-    if (amount + discount > v.status.remaining + 0.5) {
-      throw ArgumentError('Baqi sirf ${v.status.remaining.round()} hai — raqam + discount is se zyada nahi.');
-    }
     final db = await AppDatabase.instance.database;
     final when = paidAt ?? _now();
     final id = await db.transaction((txn) async {
+      // Re-read plan and all payments INSIDE the write transaction. The earlier
+      // preflight read allowed two collectors to validate against the same stale balance.
+      final planRows = await txn.query('inst_plans', where: 'id = ?', whereArgs: [planId], limit: 1);
+      if (planRows.isEmpty) throw ArgumentError('Plan nahi mila.');
+      final current = (await _views(txn, planRows, dayStart(DateTime.now()))).single;
+      if (!current.plan.isActive) throw ArgumentError('Ye plan band hai (${current.plan.status}).');
+      if (amount + discount > current.status.remaining + 0.5) {
+        throw ArgumentError('Baqi sirf ${current.status.remaining.round()} hai — raqam + discount is se zyada nahi.');
+      }
       var payId = 0;
       if (amount > 0 || fine > 0) {
         payId = await _insertPayment(txn,
-            planId: planId, planNo: v.plan.planNo, kind: payInstallment, amount: amount, fine: fine, method: method, note: note, paidAt: when);
+            planId: planId, planNo: current.plan.planNo, kind: payInstallment, amount: amount, fine: fine, method: method, note: note, paidAt: when);
       }
       if (discount > 0) {
         final did = await txn.insert('inst_payments', {
@@ -449,7 +452,7 @@ class InstPlanRepository {
         await InstSync.enqueuePayment(txn, did);
         if (payId == 0) payId = did;
       }
-      if (v.status.remaining - amount - discount <= 0.5) {
+      if (current.status.remaining - amount - discount <= 0.5) {
         await txn.update('inst_plans', {'status': planCompleted, 'closedAt': _now(), 'updatedAt': _now()},
             where: 'id = ?', whereArgs: [planId]);
         await InstSync.enqueuePlan(txn, planId);

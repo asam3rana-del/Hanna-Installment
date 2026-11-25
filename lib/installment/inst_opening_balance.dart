@@ -152,16 +152,20 @@ class InstOpeningRepository {
   }) async {
     await LicenseService.instance.requireWritable();
     if (!amount.isFinite || amount <= 0) throw ArgumentError('Raqam likhein.');
-    final st = await status(customerId);
-    if (st.remaining <= 0) throw ArgumentError('Is customer ka koi purana baqi nahi.');
-    if (amount > st.remaining + 0.005) {
-      throw ArgumentError('Raqam purane baqi (${instRs(st.remaining)}) se zyada hai.');
-    }
     final db = await AppDatabase.instance.database;
     final now = _now();
     final at = paidAt ?? now;
     late int id;
     await db.transaction((txn) async {
+      // Recalculate outstanding opening balance within the same write transaction
+      // that inserts the receipt, preventing stale preflight checks on one database.
+      final rows = await txn.rawQuery('''$_statusSql WHERE c.id = ?''', [customerId]);
+      if (rows.isEmpty) throw ArgumentError('Customer nahi mila.');
+      final st = _status(rows.first);
+      if (st.remaining <= 0) throw ArgumentError('Is customer ka koi purana baqi nahi.');
+      if (amount > st.remaining + 0.005) {
+        throw ArgumentError('Raqam purane baqi (${instRs(st.remaining)}) se zyada hai.');
+      }
       id = await txn.insert('inst_customer_receipts', {
         'customerId': customerId,
         'amount': amount,
