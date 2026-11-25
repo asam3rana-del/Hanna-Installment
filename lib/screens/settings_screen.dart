@@ -39,6 +39,11 @@ import 'workers_screen.dart';
 import '../services/permissions.dart';
 import '../widgets/permission_guard.dart';
 import '../installment/shop_logo.dart';
+import '../installment/inst_update.dart';
+import '../license/license_core.dart';
+import '../license/license_service.dart';
+import '../app_info.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../installment/inst_report_screens.dart';
 import 'dart:io' as io;
 
@@ -78,6 +83,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _compatPrint = false;
   bool _testing = false;
   String? _logoPath; // Step 31: dukaan ka logo (PDF / receipt)
+  LicenseStatus? _licStatus; // License card ke liye
+  LicenseInfo? _licInfo;
+  String _licDevice = '';
 
   @override
   void initState() {
@@ -89,6 +97,152 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Permissions.refresh().then((_) {
       if (mounted) setState(() {});
     });
+    _loadLicense();
+  }
+
+  Future<void> _loadLicense() async {
+    try {
+      final st = await LicenseService.instance.check();
+      final dev = await LicenseService.instance.deviceCode();
+      if (!mounted) return;
+      setState(() {
+        _licStatus = st;
+        _licInfo = LicenseService.instance.info;
+        _licDevice = formatDeviceCode(dev);
+      });
+    } catch (_) {}
+  }
+
+  static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  String _date(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+  /// Settings ke neeche wale sections ki chhoti heading (sona rang patti + bare harf).
+  Widget _section(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 10, 4, 10),
+        child: Row(children: [
+          Container(width: 4, height: 18, decoration: BoxDecoration(color: const Color(0xFFC9A227), borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 10),
+          Text(text.toUpperCase(),
+              style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.6, fontSize: 13, color: ThemeManager.palette.textMuted)),
+        ]),
+      );
+
+  /// Gol kinare wala safaid card, andar ListTile jaisi line (icon dabba + title + subtitle + >).
+  Widget _tileCard({required IconData icon, required Color color, required String title, required List<String> lines, VoidCallback? onTap}) =>
+      Card(
+        margin: const EdgeInsets.only(bottom: 14),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(color: color.withOpacity(0.13), borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, color: color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                  for (final l in lines)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(l, style: TextStyle(color: ThemeManager.palette.textMuted, fontSize: 13.5)),
+                    ),
+                ]),
+              ),
+              if (onTap != null) Icon(Icons.chevron_right, color: ThemeManager.palette.textMuted),
+            ]),
+          ),
+        ),
+      );
+
+  Widget _licenseCard() {
+    final st = _licStatus;
+    final info = _licInfo;
+    final ok = st == LicenseStatus.active || st == LicenseStatus.expiringSoon;
+    final title = st == null
+        ? Loc.t('License', 'لائسنس')
+        : switch (st) {
+            LicenseStatus.active => Loc.t('Licensed', 'لائسنس فعال'),
+            LicenseStatus.expiringSoon => Loc.t('License ending soon', 'لائسنس جلد ختم'),
+            LicenseStatus.expired => Loc.t('License expired', 'لائسنس ختم ہو گیا'),
+            _ => Loc.t('Not licensed', 'لائسنس نہیں'),
+          };
+    final lines = <String>[
+      if (info != null)
+        '${info.isTrial ? Loc.t('Trial', 'ٹرائل') : Loc.t('Annual', 'سالانہ')} · '
+            '${Loc.t('valid till', 'تک')} ${_date(info.expiry)}',
+      if (_licDevice.isNotEmpty) '${Loc.t('Device ID', 'ڈیوائس آئی ڈی')}: $_licDevice',
+    ];
+    final p = ThemeManager.palette;
+    return _tileCard(
+      icon: ok ? Icons.verified : Icons.gpp_maybe_outlined,
+      color: ok ? const Color(0xFF15803D) : (st == LicenseStatus.expiringSoon ? p.orange : p.red),
+      title: title,
+      lines: lines.isEmpty ? [Loc.t('Tap to enter license key', 'لائسنس کی ڈالنے کے لیے دبائیں')] : lines,
+      onTap: () async {
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LicenseScreen()));
+        _loadLicense();
+      },
+    );
+  }
+
+  Widget _aboutCard() {
+    final build = InstUpdate.currentBuild > 0 ? ' · build ${InstUpdate.currentBuild}' : '';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _open(const AboutScreen()),
+            child: Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset('assets/images/logo.png', width: 64, height: 64, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.apps, size: 48)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(AppInfo.appName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 19)),
+                  const SizedBox(height: 3),
+                  Text('${Loc.t('Installment shop management', 'قسط کی دکان کا انتظام')}$build',
+                      style: TextStyle(color: ThemeManager.palette.textMuted, fontSize: 13.5)),
+                  const SizedBox(height: 3),
+                  Text('${AppInfo.business} · ${AppInfo.developer}',
+                      style: const TextStyle(color: Color(0xFFB8901F), fontSize: 13.5, fontWeight: FontWeight.w500)),
+                ]),
+              ),
+              Icon(Icons.chevron_right, color: ThemeManager.palette.textMuted),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              icon: const Icon(Icons.support_agent, color: Color(0xFF15803D)),
+              label: Text('${Loc.t('WhatsApp support', 'واٹس ایپ سپورٹ')} ${AppInfo.supportPhone}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              onPressed: () => launchUrl(Uri.parse('https://wa.me/${AppInfo.supportWhatsAppIntl}'),
+                  mode: LaunchMode.externalApplication),
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 
   @override
@@ -424,6 +578,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
 
+  /// Band card (ExpansionTile): sirf heading dikhti hai, tap karne par khulta hai.
+  Widget _foldCard(String title, IconData icon, List<Widget> children, {String? subtitle}) => Card(
+        margin: const EdgeInsets.only(bottom: 14),
+        clipBehavior: Clip.antiAlias,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            leading: Icon(icon, color: ThemeManager.palette.navyInk),
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            subtitle: subtitle == null ? null : Text(subtitle, style: const TextStyle(fontSize: 12)),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          ),
+        ),
+      );
+
   Widget _tf(TextEditingController c, String label, {bool obscure = false, bool enabled = true, bool number = false}) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: TextField(
@@ -450,7 +621,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
     return [
       // Hanna Installment: Parties / Items / Reports / Sale / Purchase / Shell Ledger (grocery POS) hata diye.
-      row(Icons.verified_user_outlined, 'License', 'لائسنس', const LicenseScreen()),
+      // License: neeche "App update" ke upar apna card (user ki darkhwast).
       if (Permissions.can('expense'))
         row(Icons.business_center_outlined, 'Expense', 'اخراجات',
             const PermissionGuard(permission: 'expense', child: ExpenseScreen()), color: p.navyInk),
@@ -495,7 +666,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ..._linkRows(),
         const SizedBox(height: 6),
         if (admin)
-          _card(Loc.t('Shop Information', 'دکان کی معلومات'), Icons.store, [
+          _foldCard(Loc.t('Shop Information', 'دکان کی معلومات'), Icons.store,
+              subtitle: Loc.t('Name, phone, logo, payment details — tap to open', 'نام، فون، لوگو، ادائیگی کی تفصیل — کھولنے کے لیے دبائیں'), [
             // Dukaan ka logo: receipt / plan PDF / reports ke upar (app ka naam / logo nahi).
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -758,13 +930,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Text(Loc.t('MANAGE USERS', 'یوزرز مینیج کریں')),
             ),
           ]),
-        _card(Loc.t('About & Privacy', 'ایپ اور پرائیویسی'), Icons.info_outline, [
-          Text(Loc.t('Privacy policy, support, delete my data', 'پرائیویسی پالیسی، سپورٹ، ڈیٹا ختم کروانا')),
-          const SizedBox(height: 10),
-          OutlinedButton(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutScreen())),
-            child: Text(Loc.t('OPEN ABOUT', 'کھولیں')),
+        // License / App update / About — Hanna Fitness jaisa saaf andaaz (section heading + card).
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _section(Loc.t('License', 'لائسنس')),
+          _licenseCard(),
+        ]),
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _section(Loc.t('App update', 'ایپ اپڈیٹ')),
+          _tileCard(
+            icon: Icons.system_update,
+            color: ThemeManager.palette.teal,
+            title: Loc.t('Check for update', 'اپڈیٹ چیک کریں'),
+            lines: [
+              InstUpdate.currentBuild > 0
+                  ? Loc.t('This app: build ${InstUpdate.currentBuild}', 'یہ ایپ: build ${InstUpdate.currentBuild}')
+                  : Loc.t('Get the newest version', 'نیا ورژن حاصل کریں'),
+            ],
+            onTap: () => InstUpdate.checkNow(context),
           ),
+        ]),
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _section(Loc.t('About', 'ایپ کے بارے میں')),
+          _aboutCard(),
         ]),
         if (admin || DemoMode.enabled)
           _card(Loc.t('Demo / Training shop', 'ڈیمو / ٹریننگ دکان'), Icons.school_outlined, [

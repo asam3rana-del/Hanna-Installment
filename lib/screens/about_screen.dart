@@ -28,14 +28,30 @@ class AboutScreen extends StatelessWidget {
       appBar: AppBar(title: Text(Loc.t('About', 'ایپ کے بارے میں'))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(AppInfo.appName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text('${AppInfo.developer} (${AppInfo.business}) · ${AppInfo.address}'),
-              const SizedBox(height: 4),
-              Text('${AppInfo.appId}$build', style: Theme.of(context).textTheme.bodySmall),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset('assets/images/logo.png', width: 72, height: 72, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.apps, size: 56)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(AppInfo.appName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 3),
+                  Text(Loc.t('Installment shop management', 'قسط کی دکان کا انتظام'),
+                      style: TextStyle(color: Theme.of(context).hintColor)),
+                  const SizedBox(height: 3),
+                  Text('${AppInfo.business} · ${AppInfo.developer}',
+                      style: const TextStyle(color: Color(0xFFB8901F), fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 6),
+                  Text(AppInfo.address, style: Theme.of(context).textTheme.bodySmall),
+                  Text('${AppInfo.appId}$build', style: Theme.of(context).textTheme.bodySmall),
+                ]),
+              ),
             ]),
           ),
         ),
