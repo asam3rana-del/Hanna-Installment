@@ -173,6 +173,15 @@ service cloud.firestore {
                      && isMyBranch(resource.data.branchId) && !isCashier();
     }
 
+    // Sync heartbeat (firestore.rules jaisa): har branch ka ek chhota marker; har role ki device parh / badal sake
+    // (cashier bhi push karta hai), sirf apni branch ka, sirf yahi teen fields.
+    match /branch_sync/{bid} {
+      allow read: if isMyBranch(bid);
+      allow write: if isMyBranch(bid)
+                   && request.resource.data.branchId == bid
+                   && request.resource.data.keys().hasOnly(['branchId', 'at', 'n']);
+    }
+
     // Crash reports: app ki ghalti (stack trace) developer ko — sirf banana, branch member device, chhota text,
     // apna uid. Padhna / badalna / mitana app se nahi (sirf Firebase console). lib/services/crash_reporter.dart.
     match /crash_reports/{docId} {
