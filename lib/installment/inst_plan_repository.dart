@@ -466,6 +466,7 @@ class InstPlanRepository {
   /// Galat entry wapas (sirf admin / manager). Saath wali cash row bhi hat'ti hai. Advance wapas nahi hota
   /// (us ke liye plan delete). Completed plan dobara active.
   Future<void> deletePayment(InstPayment p) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager payment hata sakta hai.');
     if (p.kind == payAdvance) throw ArgumentError('Advance plan ke saath hai — plan delete karein.');
     // Discount ki cash row nahi hoti; _deleteCash phir bhi reference se dhoondta hai (kuch nahi milta) — theek.
@@ -524,6 +525,7 @@ class InstPlanRepository {
   }
 
   Future<void> deleteSecurity(InstSecurity sec) async {
+    await LicenseService.instance.requireWritable();
     if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager hata sakta hai.');
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
@@ -561,6 +563,7 @@ class InstPlanRepository {
 
   /// Ghalat bana plan mitao (sirf admin; advance ke ilawa koi qist na li ho). Item wapas stock, advance ki cash row bhi.
   Future<void> deletePlan(int planId) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (!Session.isAdmin) throw ArgumentError('Sirf Admin plan delete kar sakta hai.');
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
@@ -731,6 +734,7 @@ class InstPlanRepository {
   /// Qist na dene par saman wapas liya (admin / manager). Plan band (`repossessed`), item `repossessed`.
   /// Wasool shuda raqam wapas nahi hoti (record mein rehti hai).
   Future<void> repossess(int planId, {String note = ''}) async {
+    await LicenseService.instance.requireWritable(); // license khatam / tareekh ghalat => sirf dekhna
     if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager saman wapas le sakta hai.');
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {

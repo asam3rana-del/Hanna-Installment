@@ -41,6 +41,7 @@ void main() {
 
   // version -> what that migration step added (removed when rewinding to a version below it)
   final steps = <_Step>[
+    _Step(50, indexes: ['index_customer_profiles_server', 'index_inst_guarantors_server', 'index_inst_categories_server', 'index_inst_items_server', 'index_inst_plans_server', 'index_inst_schedule_server', 'index_inst_payments_server', 'index_inst_price_changes_server', 'index_inst_suppliers_server', 'index_inst_purchases_server', 'index_inst_supplier_payments_server', 'index_inst_customer_receipts_server', 'index_inst_cash_sales_server', 'index_inst_purchase_returns_server', 'index_inst_schedule_due', 'index_inst_items_purchase', 'index_inst_plans_item', 'index_inst_cash_sales_item']),
     _Step(49, tables: ['inst_customer_receipts'], columns: {'customer_profiles': ['openingBalance', 'openingDue']}),
     _Step(48, columns: {'inst_items': ['instPrice']}),
     _Step(47, columns: {'customer_profiles': ['khataNo']}),
@@ -124,6 +125,9 @@ void main() {
             await raw.execute('ALTER TABLE ${e.key} DROP COLUMN $c');
           }
         }
+      }
+      for (final i in s.indexes) {
+        await raw.execute('DROP INDEX IF EXISTS $i');
       }
       for (final t in s.tables) {
         await raw.execute('DROP TABLE IF EXISTS $t');
@@ -317,5 +321,6 @@ class _Step {
   final int version;
   final Map<String, List<String>> columns;
   final List<String> tables;
-  _Step(this.version, {this.columns = const {}, this.tables = const []});
+  final List<String> indexes;
+  _Step(this.version, {this.columns = const {}, this.tables = const [], this.indexes = const []});
 }

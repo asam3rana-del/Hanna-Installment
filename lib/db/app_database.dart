@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 49;
+  static const _dbVersion = 50;
 
   Database? _db;
 
@@ -355,7 +355,7 @@ class AppDatabase {
       )
     ''');
 
-    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql, ...installmentPurchaseTablesSql, ...installmentCashSaleTablesSql, ...installmentPurchaseReturnTablesSql, ...installmentSecurityTablesSql, ...installmentCustomerReceiptTablesSql]) {
+    for (final sql in [..._zakatTablesSql, ..._shellTablesSql, ..._stockMovementsSql, ..._rentTablesSql, ..._workerTablesSql, ..._shopRentTablesSql, ..._utilityBillTablesSql, ..._dueFollowupTablesSql, ...installmentTablesSql, ...installmentPlanTablesSql, ...installmentPriceTablesSql, ...installmentPurchaseTablesSql, ...installmentCashSaleTablesSql, ...installmentPurchaseReturnTablesSql, ...installmentSecurityTablesSql, ...installmentCustomerReceiptTablesSql, ...installmentIndexesSql]) {
       batch.execute(sql);
     }
     final seedAt = DateTime.now().millisecondsSinceEpoch;
@@ -667,6 +667,12 @@ class AppDatabase {
       await _addColumnIfMissing(db, 'customer_profiles', 'openingBalance', 'REAL NOT NULL DEFAULT 0');
       await _addColumnIfMissing(db, 'customer_profiles', 'openingDue', 'INTEGER NOT NULL DEFAULT 0');
       for (final sql in installmentCustomerReceiptTablesSql) {
+        await db.execute(sql);
+      }
+    }
+    if (oldVersion < 50) {
+      // v50: sirf indexes (tezi). Sab tables v49 tak ban chuki hain.
+      for (final sql in installmentIndexesSql) {
         await db.execute(sql);
       }
     }
@@ -1189,6 +1195,30 @@ class AppDatabase {
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_supplier_payments_supplier ON inst_supplier_payments (supplierId, paidAt)',
+  ];
+
+  /// v50: tezi ke indexes (koi naya data nahi). Sync pull har doc ko `serverId` se dhoondta hai (pehle poori table
+  /// parhni padti thi); wasooli list / alerts `inst_schedule.dueDate` se; piece se plan / sale / bill.
+  /// UNIQUE nahi — purani DB mein ittefaqan dohra serverId ho to migration na ruke.
+  static const installmentIndexesSql = <String>[
+    'CREATE INDEX IF NOT EXISTS index_customer_profiles_server ON customer_profiles (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_guarantors_server ON inst_guarantors (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_categories_server ON inst_categories (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_items_server ON inst_items (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_plans_server ON inst_plans (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_schedule_server ON inst_schedule (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_payments_server ON inst_payments (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_price_changes_server ON inst_price_changes (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_suppliers_server ON inst_suppliers (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_purchases_server ON inst_purchases (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_supplier_payments_server ON inst_supplier_payments (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_customer_receipts_server ON inst_customer_receipts (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_cash_sales_server ON inst_cash_sales (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_purchase_returns_server ON inst_purchase_returns (serverId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_schedule_due ON inst_schedule (dueDate)',
+    'CREATE INDEX IF NOT EXISTS index_inst_items_purchase ON inst_items (purchaseId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_plans_item ON inst_plans (itemId)',
+    'CREATE INDEX IF NOT EXISTS index_inst_cash_sales_item ON inst_cash_sales (itemId)',
   ];
 
   /// v49: customer ka purana baqi (opening balance, `customer_profiles.openingBalance`) ki wasooli.

@@ -112,6 +112,7 @@ class InstPurchaseRepository {
 
   /// Sirf woh supplier jis ka koi bill / adaigi nahi.
   Future<void> deleteSupplier(int id) async {
+    await LicenseService.instance.requireWritable();
     _requireManager();
     final db = await AppDatabase.instance.database;
     final n = (Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inst_purchases WHERE supplierId = ?', [id])) ?? 0) +
@@ -280,6 +281,7 @@ class InstPurchaseRepository {
 
   /// Ghalat wapsi khatam: piece dobara stock mein, supplier ka baqi wapas.
   Future<void> cancelReturn(PurchaseReturn r) async {
+    await LicenseService.instance.requireWritable();
     _requireManager();
     final db = await AppDatabase.instance.database;
     final now = _now();
@@ -337,6 +339,7 @@ class InstPurchaseRepository {
 
   /// Ghalat bill wapas: tab hi jab us ke SAARE pieces abhi stock mein hon. Pieces, bill ki adaigi (aur cash rows) bhi hat'ti hain.
   Future<void> deletePurchase(InstPurchase p) async {
+    await LicenseService.instance.requireWritable();
     _requireManager();
     final db = await AppDatabase.instance.database;
     final items = await purchaseItems(p.id);
@@ -396,8 +399,9 @@ class InstPurchaseRepository {
     return rows.map(InstPurchase.fromMap).toList();
   }
 
-  Future<InstPurchase?> purchase(int id) async {
-    final db = await AppDatabase.instance.database;
+  Future<InstPurchase?> purchase(int id) async => _purchaseOn(await AppDatabase.instance.database, id);
+
+  Future<InstPurchase?> _purchaseOn(DatabaseExecutor db, int id) async {
     final rows = await db.rawQuery('''
       SELECT p.*, s.name AS supplierName,
         (SELECT COALESCE(SUM(amount), 0) FROM inst_supplier_payments y WHERE y.purchaseId = p.id) AS paid,
@@ -440,7 +444,14 @@ class InstPurchaseRepository {
       if (amount > p.due + 0.5) throw ArgumentError('Is bill ka baqi sirf ${p.due.round()} hai.');
       bill = p.billNo;
     }
-    final id = await db.transaction((txn) => _insertPayment(txn,
+    final id = await db.transaction((txn) async {
+      // FIX (ek phone par do jaldi wali adaigi): bill ka baqi transaction ke andar dobara — mil kar zyada na ho.
+      if (purchaseId != null) {
+        final p = await _purchaseOn(txn, purchaseId);
+        if (p == null) throw ArgumentError('Bill nahi mila.');
+        if (amount > p.due + 0.5) throw ArgumentError('Is bill ka baqi sirf ${p.due.round()} hai.');
+      }
+      return _insertPayment(txn,
         supplierId: supplierId,
         supplierName: (sup.first['name'] as String?) ?? '',
         purchaseId: purchaseId,
@@ -448,7 +459,8 @@ class InstPurchaseRepository {
         amount: amount,
         method: method,
         note: note,
-        paidAt: paidAt ?? _now()));
+        paidAt: paidAt ?? _now());
+    });
     _changed();
     return id;
   }
@@ -498,6 +510,7 @@ class InstPurchaseRepository {
 
   /// Ghalat adaigi wapas (saath wali cash row bhi).
   Future<void> deletePayment(InstSupplierPayment p) async {
+    await LicenseService.instance.requireWritable();
     _requireManager();
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {

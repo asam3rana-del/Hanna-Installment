@@ -510,7 +510,10 @@ class SyncApi implements SyncBackend, SyncHeartbeat {
       final uid = app == null ? null : FirebaseAuth.instanceFor(app: app).currentUser?.uid;
       if (uid == null) return false;
       final snap = await fs.collection('branch_members').doc(uid).get(const GetOptions(source: Source.server));
-      final isCashier = snap.data()?['role'] == 'cashier';
+      // Rules (firestore.device-roles.rules) jaisa: role na ho = admin; saaf admin / manager = poora; baaqi sab = cashier.
+      final role = snap.data()?['role'];
+      final r = role == null ? 'admin' : role.toString().toLowerCase().trim();
+      final isCashier = r != 'admin' && r != 'manager';
       _cashierCache = isCashier;
       _cashierCacheAt = now;
       return isCashier;

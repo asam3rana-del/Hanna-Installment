@@ -23,6 +23,9 @@ const int stockPullOverlapMs = 60 * 60 * 1000;
 const Set<String> stockPullCollections = {
   'products', 'customers', 'suppliers',
   'payments', 'cash_transactions', 'sales', 'purchases', 'expenses',
+  // Qist ke paise / stock (installment): yahi masla — der se push ya peeche clock wali device ki entry miss na ho.
+  'inst_plans', 'inst_payments', 'inst_customer_receipts', 'inst_cash_sales', 'inst_items',
+  'inst_supplier_payments', 'inst_purchases', 'inst_purchase_returns',
 };
 
 /// Kotlin `pull()` ki tarteeb mein 20 collections + Flutter ki 4 Workers + 2 Shop Rents + 2 Utility Bills + 1 Due Follow-ups collections (Firestore naam).

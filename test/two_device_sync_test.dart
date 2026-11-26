@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:hanna_installment/sync/clock_check.dart';
 import 'package:hanna_installment/models/misc_entities.dart';
 import 'package:hanna_installment/sync/sync_apply.dart';
 import 'package:hanna_installment/sync/sync_pull_plan.dart';
@@ -275,6 +276,8 @@ void main() {
   late Phone b;
 
   setUp(() async {
+    ClockCheck.serverNow = () async => null; // network nahi (ghadi check band)
+    ClockCheck.resetForTest();
     SharedPreferences.setMockInitialValues({});
     _clock = 2000000000000;
     SyncRepository.isCloudReady = () async => true;

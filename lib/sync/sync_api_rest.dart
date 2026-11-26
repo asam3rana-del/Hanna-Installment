@@ -375,7 +375,10 @@ class RestSyncApi implements SyncBackend, SyncHeartbeat {
       final uid = await _fs.currentUid();
       if (uid == null) return false;
       final snap = await _fs.getDoc('branch_members', uid);
-      final isCashier = snap.data()?['role'] == 'cashier';
+      // Rules (firestore.device-roles.rules) jaisa: role na ho = admin; saaf admin / manager = poora; baaqi sab = cashier.
+      final role = snap.data()?['role'];
+      final r = role == null ? 'admin' : role.toString().toLowerCase().trim();
+      final isCashier = r != 'admin' && r != 'manager';
       _cashierCache = isCashier;
       _cashierCacheAt = now;
       return isCashier;

@@ -32,6 +32,9 @@ async function seed(env) {
     await setDoc(doc(db, 'branch_members/u2'), { branchId: 'b2' });
     await setDoc(doc(db, 'branch_members/u-cash'), { branchId: 'b1', role: 'cashier' });
     await setDoc(doc(db, 'branch_members/u-mgr'), { branchId: 'b1', role: 'manager' });
+    await setDoc(doc(db, 'branch_members/u-typo'), { branchId: 'b1', role: 'Cashier ' });
+    await setDoc(doc(db, 'branch_members/u-unknown'), { branchId: 'b1', role: 'casher' });
+    await setDoc(doc(db, 'branch_members/u-MGR'), { branchId: 'b1', role: ' Manager' });
     for (const c of INST) {
       await setDoc(doc(db, `${c}/own`), { branchId: 'b1', updatedAt: 1 });
       await setDoc(doc(db, `${c}/foreign`), { branchId: 'b2', updatedAt: 1 });
@@ -41,6 +44,11 @@ async function seed(env) {
       note: '', receivedBy: 'asam', paidAt: 1, createdAt: 1, updatedAt: 1,
     });
     await setDoc(doc(db, 'branch_sync/b2'), { branchId: 'b2', at: 1, n: 1 });
+    await setDoc(doc(db, 'inst_payments/p1'), { branchId: 'b1', serverId: 'inst_payment:T-1', kind: 'installment', amount: 5000, updatedAt: 1 });
+    await setDoc(doc(db, 'inst_cash_sales/s1'), { branchId: 'b1', serverId: 'inst_cash_sale:T-1', price: 30000, updatedAt: 1 });
+    await setDoc(doc(db, 'inst_plans/pl1'), { branchId: 'b1', serverId: 'inst_plan:T-1', status: 'active', installmentTotal: 52000, closedAt: 0, updatedAt: 1 });
+    await setDoc(doc(db, 'inst_items/i1'), { branchId: 'b1', serverId: 'inst_item:T-1', status: 'in_stock', costPrice: 40000, cashPrice: 48000, updatedAt: 1 });
+    await setDoc(doc(db, 'inst_customer_profiles/c1'), { branchId: 'b1', serverId: 'customer:T-1', cnic: '35202', openingBalance: 0, updatedAt: 1 });
   });
 }
 beforeEach(async () => {
@@ -165,4 +173,56 @@ test('roles: heartbeat works for every role in its own branch', async () => {
     await assertSucceeds(getDoc(doc(db, 'branch_sync/b1')));
     await assertFails(getDoc(doc(db, 'branch_sync/b2')));
   }
+});
+
+// ------------------------------------------------------------------ device-roles: cashier ke paise wale record
+
+test('roles: cashier payment / naqd sale ki raqam nahi badal sakta, sirf sync meta', async () => {
+  const db = rolesAs('u-cash');
+  await assertFails(updateDoc(doc(db, 'inst_payments/p1'), { amount: 1 }));
+  await assertSucceeds(updateDoc(doc(db, 'inst_payments/p1'), { updatedAt: 2, pushedAt: 2 }));
+  await assertFails(updateDoc(doc(db, 'inst_cash_sales/s1'), { price: 1 }));
+  await assertFails(updateDoc(doc(db, 'inst_cash_sales/s1'), { returnedAt: 5, refund: 30000 }));
+  await assertSucceeds(updateDoc(doc(db, 'inst_cash_sales/s1'), { updatedAt: 2 }));
+});
+
+test('roles: cashier plan ko sirf "completed" kar sakta hai; raqam / repossessed nahi', async () => {
+  const db = rolesAs('u-cash');
+  await assertFails(updateDoc(doc(db, 'inst_plans/pl1'), { installmentTotal: 1 }));
+  await assertFails(updateDoc(doc(db, 'inst_plans/pl1'), { status: 'repossessed' }));
+  await assertSucceeds(updateDoc(doc(db, 'inst_plans/pl1'), { status: 'completed', closedAt: 9, updatedAt: 9 }));
+});
+
+test('roles: cashier piece ko sirf "sold" kar sakta hai; qeemat / stock wapsi nahi', async () => {
+  const db = rolesAs('u-cash');
+  await assertFails(updateDoc(doc(db, 'inst_items/i1'), { costPrice: 1 }));
+  await assertFails(updateDoc(doc(db, 'inst_items/i1'), { cashPrice: 1, updatedAt: 2 }));
+  await assertSucceeds(updateDoc(doc(db, 'inst_items/i1'), { status: 'sold', updatedAt: 2 }));
+  await assertFails(updateDoc(doc(db, 'inst_items/i1'), { status: 'in_stock', updatedAt: 3 }));
+});
+
+test('roles: cashier customer ka purana baqi / block nahi badal sakta, baaqi profile haan', async () => {
+  const db = rolesAs('u-cash');
+  await assertFails(updateDoc(doc(db, 'inst_customer_profiles/c1'), { openingBalance: 50000 }));
+  await assertFails(updateDoc(doc(db, 'inst_customer_profiles/c1'), { blockedReason: 'x', blockedAt: 1 }));
+  await assertSucceeds(updateDoc(doc(db, 'inst_customer_profiles/c1'), { cnic: '35202-1234567-1', updatedAt: 2 }));
+});
+
+test('roles: cashier supplier side parh bhi nahi sakta (khareed qeemat / dena)', async () => {
+  const db = rolesAs('u-cash');
+  for (const c of ['inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns']) {
+    await assertFails(getDoc(doc(db, `${c}/own`)));
+  }
+  await assertSucceeds(getDoc(doc(db, 'inst_plans/own')));
+});
+
+test('roles: role ki spelling ghalat => cashier jaisi pabandi (fail-closed); " Manager" = manager', async () => {
+  for (const uid of ['u-typo', 'u-unknown']) {
+    const db = rolesAs(uid);
+    await assertFails(updateDoc(doc(db, 'inst_payments/p1'), { amount: 1 }));
+    await assertFails(getDoc(doc(db, 'inst_suppliers/own')));
+  }
+  const mgr = rolesAs('u-MGR');
+  await assertSucceeds(updateDoc(doc(mgr, 'inst_payments/p1'), { amount: 4500 }));
+  await assertSucceeds(getDoc(doc(mgr, 'inst_suppliers/own')));
 });

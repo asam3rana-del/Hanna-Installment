@@ -103,11 +103,20 @@ bool shouldApplyUpsert(int incomingUpdatedAt, int? serverUpdatedAt) =>
 /// ko cloud ki purani (0) value par wapas kar deta tha. Ab live doc mein `upsertAt` na ho to koi upsert-clock
 /// nahi (upsert lag jata hai, aur us ke saath `upsertAt` likha jata hai taake aage se protection rahe).
 /// Tombstone (`_deleted`) par purani `updatedAt` hi chalti hai, taake purani edit hata hua record zinda na kare.
+///
+/// FIX (hata hua record wapas zinda): tombstone `merge` se likha jata hai, is liye purana `upsertAt` doc mein
+/// reh jata tha aur usi se check hota tha — delete se pehle ki koi offline edit (upsertAt < edit < delete) baad
+/// mein push hoti to record (maslan payment) wapas aa jata. Ab tombstone par dono mein se jo naya ho (delete ka
+/// `updatedAt` ya purana `upsertAt`) wahi clock hai.
 int? upsertClock(Map<String, Object?>? data) {
   final up = asMillis(data?['upsertAt']);
-  if (up != null) return up;
-  if (data?['_deleted'] == true) return asMillis(data?['updatedAt']);
-  return null;
+  if (data?['_deleted'] == true) {
+    final del = asMillis(data?['updatedAt']);
+    if (up == null) return del;
+    if (del == null) return up;
+    return up > del ? up : del;
+  }
+  return up;
 }
 
 /// Delete bhi wohi: purana delete naye cloud record ko nahi mitata.

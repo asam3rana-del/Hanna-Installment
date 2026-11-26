@@ -38,14 +38,16 @@ class InstCashSaleRepository {
     if (method != 'cash' && method != 'bank') throw ArgumentError('Cash ya Bank chunein.');
     if (!phoneValid(phone)) throw ArgumentError('Phone number theek nahi (03xx xxxxxxx).');
     final db = await AppDatabase.instance.database;
-    final rows = await db.query('inst_items', where: 'id = ?', whereArgs: [itemId], limit: 1);
-    if (rows.isEmpty) throw ArgumentError('Piece nahi mila.');
-    final item = InstItem.fromMap(rows.first);
-    if (!item.inStock) throw ArgumentError('Ye piece stock mein nahi (bik chuka / qist par).');
     final now = _now();
     final when = soldAt ?? now;
-    final title = item.title.isEmpty ? item.model : item.title;
     final id = await db.transaction((txn) async {
+      // FIX (ek phone par do jaldi wali sale): stock ki jaanch transaction ke ANDAR — warna dono ek hi piece
+      // "stock mein" dekh kar bech deti thin.
+      final rows = await txn.query('inst_items', where: 'id = ?', whereArgs: [itemId], limit: 1);
+      if (rows.isEmpty) throw ArgumentError('Piece nahi mila.');
+      final item = InstItem.fromMap(rows.first);
+      if (!item.inStock) throw ArgumentError('Ye piece stock mein nahi (bik chuka / qist par).');
+      final title = item.title.isEmpty ? item.model : item.title;
       final sid = await txn.insert('inst_cash_sales', {
         'saleNo': '',
         'itemId': itemId,
@@ -98,6 +100,10 @@ class InstCashSaleRepository {
     final db = await AppDatabase.instance.database;
     final now = _now();
     await db.transaction((txn) async {
+      // FIX (do dafa wapsi = do refund): taaza halat transaction ke andar — purane screen object par bharosa nahi.
+      final cur = await txn.query('inst_cash_sales', columns: ['returnedAt'], where: 'id = ?', whereArgs: [s.id], limit: 1);
+      if (cur.isEmpty) throw ArgumentError('Sale nahi mili.');
+      if (((cur.first['returnedAt'] as num?) ?? 0) > 0) throw ArgumentError('Ye sale pehle hi wapas ho chuki hai.');
       final n = await txn.update('inst_items', {'status': itemInStock, 'updatedAt': now},
           where: 'id = ? AND status = ?', whereArgs: [s.itemId, itemSold]);
       if (n > 0) await InstSync.enqueueItem(txn, s.itemId);
@@ -127,6 +133,7 @@ class InstCashSaleRepository {
 
   /// Ghalat sale wapas: piece dobara stock mein, cash row hat'ti hai.
   Future<void> cancel(InstCashSale s) async {
+    await LicenseService.instance.requireWritable();
     if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager sale wapas kar sakta hai.');
     final db = await AppDatabase.instance.database;
     final now = _now();

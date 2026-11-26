@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:hanna_installment/sync/clock_check.dart';
 import 'package:hanna_installment/models/misc_entities.dart';
 import 'package:hanna_installment/sync/sync_queue_dao.dart';
 import 'package:hanna_installment/sync/sync_repository.dart';
@@ -95,6 +96,8 @@ void main() {
     late Database db;
     late SyncQueueDao q;
     setUp(() async {
+    ClockCheck.serverNow = () async => null; // network nahi (ghadi check band)
+    ClockCheck.resetForTest();
       db = await _memDb();
       q = SyncQueueDao(db);
     });
@@ -156,6 +159,8 @@ void main() {
     late Database db;
     late SyncQueueDao q;
     setUp(() async {
+    ClockCheck.serverNow = () async => null; // network nahi (ghadi check band)
+    ClockCheck.resetForTest();
       SharedPreferences.setMockInitialValues({});
       db = await _memDb();
       q = SyncQueueDao(db);

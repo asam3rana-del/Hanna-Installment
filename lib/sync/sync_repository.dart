@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../db/app_database.dart';
 import '../services/demo_mode.dart';
+import 'clock_check.dart';
 import 'cloud_config_store.dart';
 import 'sync_queue_dao.dart';
 import 'sync_types.dart';
@@ -117,6 +118,11 @@ class SyncRepository {
     if (api == null) {
       return SyncResult(
           pushedCount: 0, failedCount: 0, pulledOk: false, error: 'Sync backend not initialised');
+    }
+    // Ghadi bahut ghalat => na push na pull (ghalat waqt wale records doosre devices ka hisaab bigaad dete).
+    final clock = await ClockCheck.problem();
+    if (clock != null) {
+      return SyncResult(pushedCount: 0, failedCount: 0, pulledOk: false, error: clock);
     }
 
     final db = await openDb();

@@ -4,6 +4,8 @@
 #   bash /sdcard/Download/deploy_rules_live.sh rollback   -> purani (sirf branch) rules wapas
 # Role na likha ho = admin (aaj jaisa). Sirf branch_members/{uid}.role = "cashier" wale devices par pabandi.
 set -e
+# NOTE: niche wali dono rules firebase/firestore.rules aur firebase/firestore.device-roles.rules ki hoo-ba-hoo
+# copy hain. Rules file badlein to ye script bhi dobara banayein (test/rules_script_sync_test.dart CI mein pakadta hai).
 MODE="${1:-roles}"
 PROJECT="${2:-}"
 # Hanna Installment: project ka naam LAZMI (POS ka live project my-grocery-pos-8a444 galti se na badle).
@@ -94,7 +96,7 @@ service cloud.firestore {
                              'worker_salary_payments', 'shop_rents', 'shop_rent_ledger',
                              'utility_bills', 'utility_bill_payments',
                              // Hanna Installment
-                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns'];
+                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns', 'inst_customer_receipts'];
     }
 
     // Server-side record of which branch each staff UID belongs to.
@@ -137,6 +139,16 @@ service cloud.firestore {
                      && isMyBranch(resource.data.branchId);
       allow delete: if isSignedIn() && isSyncedCollection(collection)
                      && isMyBranch(resource.data.branchId);
+    }
+
+    // Sync heartbeat: har branch ka ek chhota document (branch_sync/{branchId}). Push karne wala device ise
+    // badalta hai; baqi devices pehle sirf yahi parh kar dekhte hain ke poori pull ki zaroorat hai ya nahi
+    // (Firestore ki daily read limit bachane ke liye). Sirf apni branch ka, sirf yahi teen fields.
+    match /branch_sync/{bid} {
+      allow read: if isMyBranch(bid);
+      allow write: if isMyBranch(bid)
+                   && request.resource.data.branchId == bid
+                   && request.resource.data.keys().hasOnly(['branchId', 'at', 'n']);
     }
 
     // Crash reports: app ki ghalti (stack trace) developer ko — sirf banana, branch member device, chhota text,
@@ -219,7 +231,17 @@ service cloud.firestore {
     function myRole() {
       return get(/databases/$(database)/documents/branch_members/$(request.auth.uid)).data.get('role', 'admin');
     }
-    function isCashier() { return myRole() == 'cashier'; }
+    // FIX (role ki spelling ghalat = poori ijazat): ab sirf saaf "admin" / "manager" (chhote-bade harf / khali jagah
+    // maaf) ko poori ijazat; koi bhi aur likha role ("Cashier ", "casher", "staff") = cashier jaisi pabandi.
+    // Role ka khaana hi na ho = admin (aaj jaisa, rollout safe).
+    function isCashier() {
+      let r = string(myRole()).lower().trim();
+      return !(r in ['admin', 'manager']);
+    }
+    // Sync push har write mein ye meta fields bhi likhta hai.
+    function onlyMeta(extra) {
+      return changedKeys().hasOnly(['updatedAt', 'upsertAt', 'pushedAt', 'branchId', 'appliedOps', 'serverId'].concat(extra));
+    }
 
     function notTombstone() { return request.resource.data.get('_deleted', false) != true; }
     function changedKeys() { return request.resource.data.diff(resource.data).affectedKeys(); }
@@ -228,13 +250,14 @@ service cloud.firestore {
       return collection in ['customers', 'products', 'sales', 'payments', 'expenses', 'cash_transactions',
                             'cash_register', 'units', 'categories', 'returns', 'stock_movements',
                             'app_settings', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
-                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns'];
+                            'inst_customer_profiles', 'inst_customer_receipts', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales'];
+      // inst_suppliers / inst_purchases / inst_supplier_payments / inst_purchase_returns: sirf Admin / Manager (header ke mutabiq).
     }
     function cashierMayCreate(collection) {
       return notTombstone() && collection in ['customers', 'sales', 'payments', 'expenses', 'cash_transactions',
                             'cash_register', 'returns', 'stock_movements', 'shell_customers',
                             'shell_transactions', 'shop_empty_shell_log',
-                            'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales'];
+                            'inst_customer_profiles', 'inst_customer_receipts', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales'];
     }
     function cashierMayUpdate(collection) {
       return notTombstone() && (
@@ -242,9 +265,20 @@ service cloud.firestore {
           && changedKeys().hasOnly(['stock', 'updatedAt', 'branchId', 'appliedOps', 'serverId', 'pushedAt']))
         || (collection == 'customers'
           && !changedKeys().hasAny(['creditLimit', 'openingBalance', 'stuckBalance', '_deleted']))
+        // Installment: cashier paise ka purana record nahi badal sakta — wasooli / payment / naqd sale sirf meta.
+        || (collection in ['inst_customer_receipts', 'inst_payments', 'inst_cash_sales'] && onlyMeta([]))
+        // Plan: sirf poora adaa hone par "completed" (raqam / qisten / munafa nahi; "repossessed" nahi).
+        || (collection == 'inst_plans' && onlyMeta(['status', 'closedAt'])
+            && request.resource.data.get('status', 'active') in ['active', 'completed'])
+        // Piece: sirf bikne par "sold" (qeemat / khareed nahi; stock wapsi manager karta hai).
+        || (collection == 'inst_items' && onlyMeta(['status'])
+            && request.resource.data.get('status', '') == 'sold')
+        // Customer profile: purana baqi aur block sirf manager.
+        || (collection == 'inst_customer_profiles'
+            && !changedKeys().hasAny(['openingBalance', 'openingDue', 'blockedReason', 'blockedAt', '_deleted']))
         || collection in ['sales', 'payments', 'expenses', 'cash_transactions', 'cash_register', 'returns',
                           'stock_movements', 'shell_customers', 'shell_transactions', 'shop_empty_shell_log',
-                          'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales']);
+                          'inst_guarantors', 'inst_categories', 'inst_photos', 'inst_price_changes']);
     }
 
     // Reads of a document that does not exist yet (resource == null) must not error out:
@@ -286,7 +320,7 @@ service cloud.firestore {
                              'worker_salary_payments', 'shop_rents', 'shop_rent_ledger',
                              'utility_bills', 'utility_bill_payments',
                              // Hanna Installment
-                             'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns'];
+                             'inst_customer_profiles', 'inst_customer_receipts', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans', 'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers', 'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns'];
     }
 
     // Server-side record of which branch each staff UID belongs to.
@@ -332,6 +366,15 @@ service cloud.firestore {
                      && (!isCashier() || cashierMayUpdate(collection));
       allow delete: if isSignedIn() && isSyncedCollection(collection)
                      && isMyBranch(resource.data.branchId) && !isCashier();
+    }
+
+    // Sync heartbeat (firestore.rules jaisa): har branch ka ek chhota marker; har role ki device parh / badal sake
+    // (cashier bhi push karta hai), sirf apni branch ka, sirf yahi teen fields.
+    match /branch_sync/{bid} {
+      allow read: if isMyBranch(bid);
+      allow write: if isMyBranch(bid)
+                   && request.resource.data.branchId == bid
+                   && request.resource.data.keys().hasOnly(['branchId', 'at', 'n']);
     }
 
     // Crash reports: app ki ghalti (stack trace) developer ko — sirf banana, branch member device, chhota text,

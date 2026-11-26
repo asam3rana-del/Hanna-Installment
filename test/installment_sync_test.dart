@@ -262,4 +262,48 @@ void main() {
     final t = InstDueAlert.bodyFor(dueTodayCount: 2, dueToday: 8000, overdueCount: 1, overdue: 4000, topNames: const ['Ali', 'Usman']);
     expect(t, 'Aaj 2 qisten (Rs 8000) • 1 late (Rs 4000). Pehle: Ali, Usman. Tap karke wasooli list dekhein.');
   });
+
+  test('plan status payments se: purana "active" poore adaa plan ko wapas nahi kholta (aur ulta)', () async {
+    await seedA();
+    await b.insert('customers', {'name': 'Ali', 'serverId': 'customer:AAAA-1'});
+    await applyInstallmentChanges(b, await _cloud(a), nowMs: () => 9000);
+    final planB = (await b.query('inst_plans')).single;
+    final pid = planB['id'] as int;
+    // B par poori qist aa gayi (52000) magar cloud ka plan doc abhi bhi "active" hai.
+    await b.insert('inst_payments', {'planId': pid, 'kind': 'installment', 'amount': 52000, 'paidAt': 50, 'createdAt': 50});
+    await applyInstallmentChanges(b, await _cloud(a), nowMs: () => 9000);
+    var p = (await b.query('inst_plans')).single;
+    expect(p['status'], 'completed');
+    expect(p['closedAt'], 50);
+    // Ulta: payment hat gayi magar plan "completed" reh gaya => wapas active.
+    await b.delete('inst_payments', where: "kind = 'installment'");
+    await b.update('inst_plans', {'status': 'completed'});
+    expect(await reconcilePlanStatuses(b, nowMs: () => 9000), 1);
+    p = (await b.query('inst_plans')).single;
+    expect(p['status'], 'active');
+    expect(p['closedAt'], 0);
+    // Saman wapas (repossessed) ko nahi chhedte.
+    await b.update('inst_plans', {'status': 'repossessed'});
+    expect(await reconcilePlanStatuses(b, nowMs: () => 9000), 0);
+  });
+
+  test('plan tombstone: is device ki abhi na bheji wasooli wala plan nahi mitta', () async {
+    await seedA();
+    await b.insert('customers', {'name': 'Ali', 'serverId': 'customer:AAAA-1'});
+    await applyInstallmentChanges(b, await _cloud(a), nowMs: () => 9000);
+    final pid = (await b.query('inst_plans')).single['id'] as int;
+    // B ne offline qist li (queue mein, push nahi hui).
+    final payId = await b.insert('inst_payments', {'planId': pid, 'kind': 'installment', 'amount': 1000, 'paidAt': 60, 'createdAt': 60});
+    await InstSync.enqueuePayment(b, payId);
+    // A ne plan hata diya.
+    await a.delete('sync_queue');
+    await InstSync.enqueueDeleteRow(a, instPlanType, 'inst_plans', 'id', 1);
+    await applyInstallmentChanges(b, await _cloud(a), nowMs: () => 9000);
+    expect((await b.query('inst_plans')).length, 1, reason: 'na bheji wasooli bachani hai');
+    expect((await b.query('inst_payments', where: "kind = 'installment'")).length, 1);
+    // Wasooli push ho gayi (queue saaf) => agli pull plan hata deti hai.
+    await b.update('sync_queue', {'syncedAt': 9999});
+    await applyInstallmentChanges(b, await _cloud(a), nowMs: () => 9000);
+    expect(await b.query('inst_plans'), isEmpty);
+  });
 }

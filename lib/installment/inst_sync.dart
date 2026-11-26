@@ -22,7 +22,7 @@ export 'inst_sync_names.dart';
 ///   plan -> customerServerId + itemServerId + guarantorServerIds (+ poora schedule plan ke andar),
 ///   payment -> planServerId + cashServerId (saath wali cash_transactions row, jo POS khud sync karta hai),
 ///   purchase -> supplierServerId, item -> purchaseServerId, supplier payment -> supplier/purchase/cashServerId.
-/// Tasveerein sync NAHI hoti (Firebase Spark par Storage nahi) — sirf is device par.
+/// Tasveerein bhi `inst_photos` collection se sync hoti hain (Firestore doc ke andar — Storage nahi).
 
 String _s(Object? v) => v is String ? v : '';
 String? _sn(Object? v) => v is String && v.trim().isNotEmpty ? v : null;
@@ -729,6 +729,18 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
     final localId = await _localIdBySid(db, 'inst_plans', sid);
     if (d['_deleted'] == true) {
       if (localId != null) {
+        // FIX (offline wasooli gum): doosre device ne plan hataya, magar is device par is plan ki koi wasooli abhi
+        // push nahi hui — to plan aur wo wasooli mat mitao (paisa aur cash book ka record bachta hai; dukaandar
+        // dekh kar faisla kare). Wasooli push ho jane ke baad agli pull plan ko wese hi hata degi.
+        var unpushed = false;
+        for (final r in await db.query('inst_payments', columns: ['serverId'], where: 'planId = ?', whereArgs: [localId])) {
+          final psid = _sn(r['serverId']);
+          if (psid == null || await pending(instPaymentType, psid)) {
+            unpushed = true;
+            break;
+          }
+        }
+        if (unpushed) continue;
         await db.delete('inst_payments', where: 'planId = ?', whereArgs: [localId]);
         await db.delete('inst_schedule', where: 'planId = ?', whereArgs: [localId]);
         await db.delete('inst_plans', where: 'id = ?', whereArgs: [localId]);
@@ -962,7 +974,40 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
     }
   }
 
+  // ---- plan ka status payments se dobara (last-write-wins ka ilaaj): kisi aur device ka purana "active" yahan ke
+  // "completed" ko (ya ulta) overwrite kar de to asli payments se sahi karo. Saman wapas (repossessed) nahi chhedte.
+  if (of('inst_plans').isNotEmpty || of('inst_payments').isNotEmpty) {
+    await reconcilePlanStatuses(db, nowMs: nowMs);
+  }
+
   // ---- tasveerein (files; customers / guarantors upar aa chuke)
   await applyInstallmentPhotos(db, of('inst_photos'));
   InstSync.onApplied?.call();
+}
+
+/// Har chalte / poore plan ka status us ki qiston + discount se: poora adaa => `completed`, warna `active`.
+/// Sirf local; cloud ko kuch nahi bhejta (har device khud sahi kar leta hai). Wapas: kitne plan badle.
+Future<int> reconcilePlanStatuses(DatabaseExecutor db, {required int Function() nowMs}) async {
+  final rows = await db.rawQuery('''
+    SELECT p.id AS id, p.status AS status, p.installmentTotal AS total,
+      COALESCE((SELECT SUM(y.amount) FROM inst_payments y WHERE y.planId = p.id AND y.kind IN ('installment', 'discount')), 0) AS paid,
+      COALESCE((SELECT MAX(y.paidAt) FROM inst_payments y WHERE y.planId = p.id AND y.kind IN ('installment', 'discount')), 0) AS lastPaid
+    FROM inst_plans p WHERE p.status IN ('active', 'completed')
+  ''');
+  var changed = 0;
+  for (final r in rows) {
+    final total = _d(r['total']);
+    final paid = _d(r['paid']);
+    final full = paid >= total - 0.5;
+    final status = _s(r['status']);
+    if (status == 'active' && full) {
+      final at = _i(r['lastPaid']);
+      await db.update('inst_plans', {'status': 'completed', 'closedAt': at > 0 ? at : nowMs()}, where: 'id = ?', whereArgs: [r['id']]);
+      changed++;
+    } else if (status == 'completed' && !full) {
+      await db.update('inst_plans', {'status': 'active', 'closedAt': 0}, where: 'id = ?', whereArgs: [r['id']]);
+      changed++;
+    }
+  }
+  return changed;
 }
