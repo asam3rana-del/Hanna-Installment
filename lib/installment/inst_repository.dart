@@ -222,6 +222,39 @@ class InstRepository {
     return out;
   }
 
+  /// Customer hatao (galti se bana / dohra). Sirf Admin / Manager. Is ka koi qist plan ya purana baqi
+  /// (ya us ki wasooli) ho to NAHI hatta — paison ki history na toote (aise customer ko blacklist karein).
+  /// Saath mein profile aur zamin bhi (sab devices se — sync tombstone). Customer Recycle Bin mein jata hai.
+  Future<void> deleteCustomer(int customerId) async {
+    await LicenseService.instance.requireWritable();
+    if (!Session.isAdminOrManager) throw ArgumentError('Sirf Admin / Manager customer hata sakta hai.');
+    final db = await AppDatabase.instance.database;
+    final c = await customer(customerId);
+    if (c == null) throw ArgumentError('Customer nahi mila.');
+    Future<int> count(String sql) async => Sqflite.firstIntValue(await db.rawQuery(sql, [customerId])) ?? 0;
+    final plans = await count('SELECT COUNT(*) FROM inst_plans WHERE customerId = ?');
+    if (plans > 0) {
+      throw ArgumentError('Is customer ke $plans qist plan hain — customer nahi hat sakta. (Ghalat plan pehle hatayein, '
+          'ya customer ko blacklist karein.)');
+    }
+    final receipts = await count('SELECT COUNT(*) FROM inst_customer_receipts WHERE customerId = ?');
+    final p = await profile(customerId);
+    if (receipts > 0 || (p?.openingBalance ?? 0) > 0) {
+      throw ArgumentError('Is customer ka purana baqi / wasooli darj hai — customer nahi hat sakta.');
+    }
+    await db.transaction((txn) async {
+      for (final g in await txn.query('inst_guarantors', columns: ['id'], where: 'customerId = ?', whereArgs: [customerId])) {
+        final gid = (g['id'] as num).toInt();
+        await InstSync.enqueueDeleteRow(txn, instGuarantorType, 'inst_guarantors', 'id', gid);
+        await txn.delete('inst_guarantors', where: 'id = ?', whereArgs: [gid]);
+      }
+      await InstSync.enqueueDeleteRow(txn, instProfileType, 'customer_profiles', 'customerId', customerId);
+      await txn.delete('customer_profiles', where: 'customerId = ?', whereArgs: [customerId]);
+    });
+    await PartyRepository.instance.deleteCustomer(c);
+    _changed();
+  }
+
   // ================================================================ guarantors
 
   Future<List<Guarantor>> guarantors(int customerId) async {

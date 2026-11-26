@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/party.dart';
 import '../services/party_photo_store.dart';
 import '../services/session.dart';
+import '../services/whatsapp_sender.dart';
 import '../theme/theme_manager.dart';
 import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
@@ -584,6 +585,40 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
     } catch (_) {}
   }
 
+  /// Customer hatao — sirf jab koi plan / purana baqi na ho (repository khud rokta hai, wajah dikhate hain).
+  Future<void> _deleteCustomer() async {
+    final c = _c;
+    if (c == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(Loc.t('Delete customer?', 'کسٹمر ہٹائیں؟')),
+        content: Text(Loc.t(
+            '${c.name} — profile, documents and guarantors will be removed from all devices. '
+                'A customer with installment plans or old balance cannot be deleted (blacklist instead).',
+            '${c.name} — پروفائل، کاغذات اور ضامن سب ڈیوائسز سے ہٹ جائیں گے۔ '
+                'جس کسٹمر کے قسط پلان یا پرانا بقایا ہو وہ نہیں ہٹ سکتا (بلیک لسٹ کریں)۔')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Loc.t('Cancel', 'منسوخ'))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: ThemeManager.palette.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(Loc.t('Delete', 'ہٹائیں')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await InstRepository.instance.deleteCustomer(widget.customerId);
+      if (!mounted) return;
+      instToast(context, Loc.t('Customer deleted.', 'کسٹمر ہٹ گیا۔'));
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = ThemeManager.palette;
@@ -604,6 +639,11 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                   onPressed: _toggleBlock),
             if (c != null)
               IconButton(tooltip: Loc.t('Edit', 'تبدیلی'), icon: const Icon(Icons.edit_outlined, color: Colors.white), onPressed: _edit),
+            if (c != null && Session.isAdminOrManager)
+              IconButton(
+                  tooltip: Loc.t('Delete customer', 'کسٹمر ہٹائیں'),
+                  icon: const Icon(Icons.delete_outline, color: Colors.white),
+                  onPressed: _deleteCustomer),
           ],
         ),
         Expanded(
@@ -631,11 +671,24 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
                       _profileCard(p, c),
                       const SizedBox(height: 12),
                       if (c.phone.isNotEmpty)
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.call_outlined),
-                          label: Text(Loc.t('Call', 'کال')),
-                          onPressed: () => _call(c.phone),
-                        ),
+                        Row(children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.call_outlined),
+                              label: Text(Loc.t('Call', 'کال')),
+                              onPressed: () => _call(c.phone),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF128C7E)),
+                              icon: const Icon(Icons.chat_outlined),
+                              label: const Text('WhatsApp'),
+                              onPressed: () => sendOnWhatsApp(context, phone: c.phone, text: ''),
+                            ),
+                          ),
+                        ]),
                       ], [
                       // Purana baqi (ho to): kitna, wasool, baqi + "Receive".
                       InstOpeningCard(customerId: widget.customerId),
@@ -807,6 +860,12 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
             ),
             if (g.phone.isNotEmpty)
               IconButton(icon: Icon(Icons.call_outlined, color: p.teal), onPressed: () => _call(g.phone)),
+            if (g.phone.isNotEmpty)
+              IconButton(
+                tooltip: 'WhatsApp',
+                icon: const Icon(Icons.chat_outlined, color: Color(0xFF128C7E)),
+                onPressed: () => sendOnWhatsApp(context, phone: g.phone, text: ''),
+              ),
             PopupMenuButton<String>(
               onSelected: (v) => v == 'edit' ? _editGuarantor(g) : _deleteGuarantor(g),
               itemBuilder: (_) => [

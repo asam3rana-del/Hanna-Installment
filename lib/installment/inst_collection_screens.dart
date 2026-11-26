@@ -47,6 +47,26 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
   bool _loaded = false;
   late CollectWindow _w = widget.initial;
   final int _today = dayStart(DateTime.now());
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Search: naam, phone, plan no., item / model (chhote-bade harf barabar; phone mein - / space maaf).
+  bool _matches(PlanView v) {
+    final q = _search.text.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final digits = q.replaceAll(RegExp(r'[^0-9]'), '');
+    if (v.customerName.toLowerCase().contains(q) ||
+        v.plan.planNo.toLowerCase().contains(q) ||
+        v.itemTitle.toLowerCase().contains(q)) {
+      return true;
+    }
+    return digits.length >= 3 && v.customerPhone.replaceAll(RegExp(r'[^0-9]'), '').contains(digits);
+  }
 
   @override
   void initState() {
@@ -81,7 +101,7 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
       };
 
   List<PlanView> get _rows {
-    final list = _all.where((v) => _amount(v) > 0.5).toList()
+    final list = _all.where((v) => _amount(v) > 0.5 && _matches(v)).toList()
       ..sort((a, b) {
         final c = b.status.daysLate.compareTo(a.status.daysLate);
         if (c != 0) return c;
@@ -142,6 +162,22 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
               ),
           ]),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          child: TextField(
+            controller: _search,
+            onChanged: (_) => setState(() {}),
+            decoration: instDeco(p, Loc.t('Search: name, phone, plan no., model', 'تلاش: نام، فون، پلان نمبر، ماڈل')).copyWith(
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => setState(() => _search.clear()),
+                    ),
+            ),
+          ),
+        ),
         Container(
           margin: const EdgeInsets.fromLTRB(16, 10, 16, 4),
           padding: const EdgeInsets.all(14),
@@ -198,8 +234,14 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
               ]),
             ]),
           ),
-          if (v.customerPhone.isNotEmpty) IconButton(icon: Icon(Icons.call_outlined, color: p.teal), onPressed: () => _call(v.customerPhone)),
-          IconButton(icon: Icon(Icons.chat_outlined, color: p.teal), onPressed: () => remindPlan(context, v)),
+          if (v.customerPhone.isNotEmpty)
+            IconButton(tooltip: Loc.t('Call', 'کال'), icon: Icon(Icons.call_outlined, color: p.teal), onPressed: () => _call(v.customerPhone)),
+          // WhatsApp: qist ki yaad-dihani (raqam, tareekh) seedha customer ki chat mein.
+          IconButton(
+            tooltip: Loc.t('WhatsApp reminder', 'واٹس ایپ یاد دہانی'),
+            icon: const Icon(Icons.chat_outlined, color: Color(0xFF128C7E)),
+            onPressed: () => remindPlan(context, v),
+          ),
         ]),
       ),
     );

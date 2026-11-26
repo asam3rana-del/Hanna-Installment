@@ -8,6 +8,7 @@ import 'package:hanna_installment/db/app_database.dart';
 import 'package:hanna_installment/installment/inst_models.dart';
 import 'package:hanna_installment/installment/inst_plan_math.dart';
 import 'package:hanna_installment/installment/inst_plan_repository.dart';
+import 'package:hanna_installment/installment/inst_repository.dart';
 import 'package:hanna_installment/license/license_core.dart';
 import 'package:hanna_installment/license/license_service.dart';
 import 'package:hanna_installment/services/session.dart';
@@ -269,6 +270,37 @@ void main() {
       final s = (await v()).schedule;
       Session.role = 'cashier';
       await expectLater(repo.setDueDate(planId, 1, s[0].$1 + 86400000), throwsArgumentError);
+    });
+  });
+
+  // ------------------------------------------------------------------ customer hatana
+
+  group('deleteCustomer', () {
+    test('qist plan wala customer nahi hatta', () async {
+      await expectLater(InstRepository.instance.deleteCustomer(customerId), throwsArgumentError);
+      expect(await InstRepository.instance.customer(customerId), isNotNull);
+    });
+
+    test('bina plan wala customer: customer + profile + zamin sab hat jate', () async {
+      final db = await AppDatabase.instance.database;
+      final other = await db.insert('customers', {'name': 'Ghalat', 'phone': '03009998887'});
+      await db.insert('customer_profiles', {'customerId': other});
+      await db.insert('inst_guarantors', {'customerId': other, 'name': 'Zamin'});
+      await InstRepository.instance.deleteCustomer(other);
+      expect(await InstRepository.instance.customer(other), isNull);
+      expect(await db.query('customer_profiles', where: 'customerId = ?', whereArgs: [other]), isEmpty);
+      expect(await db.query('inst_guarantors', where: 'customerId = ?', whereArgs: [other]), isEmpty);
+    });
+
+    test('purana baqi wala customer nahi hatta; cashier kisi ko nahi hata sakta', () async {
+      final db = await AppDatabase.instance.database;
+      final other = await db.insert('customers', {'name': 'Purana', 'phone': '03007776665'});
+      await db.insert('customer_profiles', {'customerId': other, 'openingBalance': 5000.0});
+      await expectLater(InstRepository.instance.deleteCustomer(other), throwsArgumentError);
+      final plain = await db.insert('customers', {'name': 'Saada', 'phone': '03005554443'});
+      Session.role = 'cashier';
+      await expectLater(InstRepository.instance.deleteCustomer(plain), throwsArgumentError);
+      expect(await InstRepository.instance.customer(plain), isNotNull);
     });
   });
 }
