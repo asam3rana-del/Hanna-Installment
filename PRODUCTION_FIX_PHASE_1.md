@@ -38,3 +38,12 @@ SQLite transactions protect concurrent writes on one device/database. They do no
 3. Run Firebase rules tests against the emulator.
 4. Deploy indexes and rules to a staging Firebase project.
 5. Test same-device double collection and two-device offline collection separately.
+
+
+## Additional reconciliation in this package (2026-11-26)
+
+5. **Canonical mobile application ID:** CI configures Android and iOS as `com.hannasolutions.installment`. The launch guide, store listing, and personal-use signoff previously contained the conflicting `com.hannasolutions.pos`; those current operational documents are now aligned to the build scripts. The Firebase Android app must use `com.hannasolutions.installment`. The generated `android/` and `ios/` folders are intentionally absent from this source ZIP; CI generates them before applying the IDs.
+
+6. **Offline multi-device policy:** The local SQLite transaction changes above do not provide distributed locking. Until a trusted server-side atomic collection endpoint is implemented and verified, do not collect the same installment plan on multiple offline devices. Assign one collection device per branch/plan, keep the other devices read-only for installment collection while offline, and reconcile sync before changing the collector. This is an operational mitigation, not a technical cross-device lock.
+
+7. **Cashier receipt rules:** The current `firestore.device-roles.rules` allows cashier read/create of `inst_customer_receipts`; updates are restricted to sync metadata. `firebase/rules-tests/installment_rules.test.js` contains assertions for amount-update denial, metadata-update allowance, tombstone denial, and branch isolation. Emulator execution is still required before deployment.

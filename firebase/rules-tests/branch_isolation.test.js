@@ -15,7 +15,12 @@ const COLLECTIONS = [
   'returns', 'stock_movements', 'app_settings', 'shell_customers', 'shell_transactions',
   'shop_empty_shell_log', 'workers', 'worker_attendance', 'worker_advances',
   'worker_salary_payments', 'shop_rents', 'shop_rent_ledger', 'utility_bills',
-  'utility_bill_payments', 'due_followups',
+  'utility_bill_payments',
+  // Hanna Installment collections: include every collection from firestore.rules allowlist.
+  'inst_customer_profiles', 'inst_guarantors', 'inst_categories', 'inst_items', 'inst_plans',
+  'inst_payments', 'inst_photos', 'inst_price_changes', 'inst_cash_sales', 'inst_suppliers',
+  'inst_purchases', 'inst_supplier_payments', 'inst_purchase_returns', 'inst_customer_receipts',
+  'due_followups',
 ];
 
 // method/outcome satisfy the due_followups validation; harmless extra fields elsewhere.
@@ -109,4 +114,25 @@ test('due_followups: validation still rejects bad fields (own branch)', async ()
   await assertFails(setDoc(doc(db, 'due_followups/bad1'), { branchId: 'b1', method: 'call', outcome: 'bogus' }));
   await assertFails(setDoc(doc(db, 'due_followups/bad2'), { branchId: 'b1', method: 'pigeon', outcome: 'note' }));
   await assertFails(setDoc(doc(db, 'due_followups/bad3'), { branchId: 'b1', method: 'call', outcome: 'paid', amount: -5 }));
+});
+
+
+test('branch_sync: only a provisioned member can read/write its own branch heartbeat', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'branch_sync/b1'), { branchId: 'b1', at: 1000, n: 1 });
+  });
+  const b1 = as('uid-b1');
+  const b2 = as('uid-b2');
+  await assertSucceeds(getDoc(doc(b1, 'branch_sync/b1')));
+  await assertSucceeds(setDoc(doc(b1, 'branch_sync/b1'), { branchId: 'b1', at: 2000, n: 2 }));
+  await assertFails(getDoc(doc(b2, 'branch_sync/b1')));
+  await assertFails(setDoc(doc(b2, 'branch_sync/b1'), { branchId: 'b1', at: 3000, n: 3 }));
+  await assertFails(setDoc(doc(b1, 'branch_sync/b2'), { branchId: 'b2', at: 3000, n: 3 }));
+  await assertFails(setDoc(doc(as('unprovisioned'), 'branch_sync/b1'), { branchId: 'b1', at: 4000, n: 4 }));
+});
+
+test('branch_sync: extra fields and malformed branch identifiers are denied', async () => {
+  const b1 = as('uid-b1');
+  await assertFails(setDoc(doc(b1, 'branch_sync/b1'), { branchId: 'b1', at: 1000, n: 1, owner: 'attacker' }));
+  await assertFails(setDoc(doc(b1, 'branch_sync/b1'), { branchId: 'b2', at: 1000, n: 1 }));
 });

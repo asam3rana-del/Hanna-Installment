@@ -72,7 +72,7 @@ Iske baad commercial ke liye sirf Play Console protocols (`PRODUCTION_LAUNCH.md`
 - ✅ 64 Firestore indexes deploy + Enabled → "pushedAt index missing" warning khatam, payment sync theek
 - ✅ Privacy site live: https://my-grocery-pos-8a444.web.app/privacy.html
 - ✅ Firebase rules test #11 green → **device-roles rules live** (`tools/deploy_rules_live.sh`); rollback: `bash deploy_rules_live.sh rollback`
-- ✅ Android app `com.hannasolutions.pos` Firebase mein + SHA-1/SHA-256
+- ✅ Android app `com.hannasolutions.installment` Firebase mein + SHA-1/SHA-256
 
 **Do phone sync (nayi rules ke saath)**
 - ✅ Dono phone Sync Now → "Received", koi error nahi

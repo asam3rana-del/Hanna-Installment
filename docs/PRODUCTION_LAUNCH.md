@@ -9,9 +9,10 @@ Ye file un kaamon ki hai jo **aap** (Play Console / Firebase / dukaan) karenge, 
 - Play Console par **Play App Signing** on rahne dein (default). Phir CI wali key sirf "upload key" hai; kho jaye
   to Google se reset ho sakti hai.
 
-## 2. App ID — ✅ faisla: `com.hannasolutions.pos` (2026-11-10)
-Pehle: `com.example.ah_developer_kiryana_store`. Ab CI har build mein Android `applicationId` aur iOS bundle id
-`com.hannasolutions.pos` rakhta hai (`tools/android_fix.sh` ka `APP_ID`, `build.yml` ka iOS step). Ise **kabhi na badlein**.
+## 2. App ID — canonical: `com.hannasolutions.installment`
+CI har build mein Android `applicationId` aur iOS bundle id `com.hannasolutions.installment` set karta hai (`tools/android_fix.sh` ka `APP_ID`, `build.yml` ka iOS step). Firebase Console mein bhi isi package ID ka Android app register hona chahiye. Ise **kabhi na badlein**.
+
+Note: purane POS-derived documents mein `com.hannasolutions.pos` likha tha; woh Hanna Installment build configuration se match nahi karta. Is project ke liye current build scripts ko source of truth rakhein.
 (Code ka andar wala package / `namespace` wahi purana hai — us se users ko koi farq nahi.)
 
 ⚠️ Ye **nayi app** hai: purani "com.example" app ke upar update nahi hogi, phone par dono alag dikhengi. Har dukaan par:
@@ -23,7 +24,7 @@ Pehle: `com.example.ah_developer_kiryana_store`. Ab CI har build mein Android `a
    `branch_members` doc banayein (purane device ki tarah), warna sync par permission-denied.
 5. Sab theek ho to **purani app uninstall**.
 
-**Firebase:** Console → Project settings → Add app → Android → package `com.hannasolutions.pos` + SHA-1 / SHA-256
+**Firebase:** Console → Project settings → Add app → Android → package `com.hannasolutions.installment` + SHA-1 / SHA-256
 (Play Console → App integrity → App signing aur Upload key dono). Phone OTP login, App Check isi ke baad chalenge.
 
 ## 3. Play Console

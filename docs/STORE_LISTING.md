@@ -7,7 +7,7 @@ Default language: **English (United States)**; Translations → **Urdu (ur)** ad
 | Field | Value |
 |-------|-------|
 | App name (30) | `Hanna POS: Billing & Khata` |
-| Package | `com.hannasolutions.pos` |
+| Package | `com.hannasolutions.installment` |
 | Category | Business |
 | Tags | Point of sale, Accounting, Inventory |
 | Developer name | Asam Hameed (Hanna Solutions) |
