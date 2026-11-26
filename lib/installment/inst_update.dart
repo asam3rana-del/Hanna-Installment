@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -114,23 +115,73 @@ class InstUpdate {
     return null;
   }
 
-  static Future<UpdateInfo?> fetch() async {
-    final plat = _platform;
-    if (plat == null || AppInfo.updateUrl.isEmpty) return null;
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
-    try {
-      final uri = Uri.parse(AppInfo.updateUrl).replace(queryParameters: {'t': '${DateTime.now().millisecondsSinceEpoch ~/ 60000}'});
-      final req = await client.getUrl(uri);
-      final res = await req.close().timeout(const Duration(seconds: 10));
-      if (res.statusCode != 200) return null;
-      final body = await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
-      if (body.length > 20000) return null;
-      return parseUpdateInfo(body, plat);
-    } catch (_) {
-      return null;
-    } finally {
-      client.close(force: true);
+  static Future<UpdateInfo?> fetch() async => (await fetchDetailed()).info;
+
+  /// Aakhri nakaam koshish ki wajah (user ko dikhane ke liye).
+  static String lastError = '';
+
+  /// update.json ke raaste: pehle raw.githubusercontent (asal), wo na khule (kuch ISPs / DNS par raw band hota
+  /// hai, ya waqti masla) to GitHub API, phir jsDelivr CDN. Pehla jo sahi JSON de, wahi.
+  static List<(Uri, Map<String, String>)> _sources() {
+    final t = '${DateTime.now().millisecondsSinceEpoch ~/ 60000}';
+    final raw = Uri.parse(AppInfo.updateUrl);
+    final out = <(Uri, Map<String, String>)>[
+      (raw.replace(queryParameters: {'t': t}), const {}),
+    ];
+    // https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>
+    final seg = raw.pathSegments;
+    if (raw.host == 'raw.githubusercontent.com' && seg.length >= 4) {
+      final owner = seg[0], repo = seg[1], branch = seg[2], path = seg.sublist(3).join('/');
+      out.add((
+        Uri.https('api.github.com', '/repos/$owner/$repo/contents/$path', {'ref': branch}),
+        const {'Accept': 'application/vnd.github.raw', 'User-Agent': 'hanna-installment'},
+      ));
+      out.add((Uri.https('cdn.jsdelivr.net', '/gh/$owner/$repo@$branch/$path', {'t': t}), const {}));
     }
+    return out;
+  }
+
+  static Future<({UpdateInfo? info, String error})> fetchDetailed() async {
+    final plat = _platform;
+    if (plat == null || AppInfo.updateUrl.isEmpty) return (info: null, error: 'not supported');
+    final errors = <String>[];
+    for (final (uri, headers) in _sources()) {
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+      try {
+        final req = await client.getUrl(uri);
+        headers.forEach(req.headers.set);
+        final res = await req.close().timeout(const Duration(seconds: 10));
+        if (res.statusCode != 200) {
+          await res.drain<void>();
+          errors.add('${uri.host}: HTTP ${res.statusCode}');
+          continue;
+        }
+        final body = await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
+        if (body.length > 20000) {
+          errors.add('${uri.host}: too big');
+          continue;
+        }
+        final info = parseUpdateInfo(body, plat);
+        if (info == null) {
+          errors.add('${uri.host}: bad file');
+          continue;
+        }
+        lastError = '';
+        return (info: info, error: '');
+      } on HandshakeException catch (_) {
+        errors.add('${uri.host}: secure connection failed (PC date/time?)');
+      } on SocketException catch (e) {
+        errors.add('${uri.host}: ${e.osError?.message ?? e.message}');
+      } on TimeoutException catch (_) {
+        errors.add('${uri.host}: timeout');
+      } catch (e) {
+        errors.add('${uri.host}: $e');
+      } finally {
+        client.close(force: true);
+      }
+    }
+    lastError = errors.join(' | ');
+    return (info: null, error: lastError);
   }
 
   /// Home khulne par: 6 ghante mein ek dafa, chup chaap. Local build (0) par kuch nahi.
@@ -156,13 +207,17 @@ class InstUpdate {
   static Future<void> checkNow(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(SnackBar(content: Text(Loc.t('Checking for update...', 'اپڈیٹ دیکھ رہے ہیں...'))));
-    final info = await fetch();
+    final r = await fetchDetailed();
+    final info = r.info;
     if (!context.mounted) return;
     messenger.hideCurrentSnackBar();
     final cur = currentBuild;
     if (info == null) {
-      messenger.showSnackBar(
-          SnackBar(content: Text(Loc.t('Could not check (internet?). Try again later.', 'چیک نہیں ہو سکا (انٹرنیٹ؟)۔ بعد میں دوبارہ کوشش کریں۔'))));
+      // Wajah bhi dikhao (net / DNS / PC ki tareekh) — "internet?" se masla pakra nahi jata tha.
+      messenger.showSnackBar(SnackBar(
+        duration: const Duration(seconds: 10),
+        content: Text('${Loc.t('Could not check for update.', 'اپڈیٹ چیک نہیں ہو سکا۔')}\n${r.error}'),
+      ));
       return;
     }
     if (!info.newerThan(cur)) {
