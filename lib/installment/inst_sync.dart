@@ -215,6 +215,7 @@ class InstSync {
       for (final k in const ['cashPrice', 'costPrice', 'advance', 'profitValue', 'profit', 'totalPrice', 'installmentTotal', 'lateFee'])
         k: _d(p[k]),
       for (final k in const ['count', 'firstDueDate', 'roundTo', 'graceDays', 'createdAt', 'closedAt']) k: _i(p[k]),
+      'profitHistory': _s(p['profitHistory']),
     }));
   }
 
@@ -770,6 +771,8 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
         k: _d(d[k]),
       for (final k in const ['count', 'firstDueDate', 'roundTo', 'graceDays', 'closedAt']) k: _i(d[k]),
       'updatedAt': _i(d['updatedAt']),
+      // v52: purane doc mein field nahi => local history wahi rahe.
+      if (d.containsKey('profitHistory')) 'profitHistory': _s(d['profitHistory']),
     };
     final int planId;
     if (localId == null) {

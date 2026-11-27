@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'inst_plan_math.dart';
@@ -213,6 +214,113 @@ double? profitShare({required double collected, required double totalPrice, requ
   return _r2(collected * (totalPrice - costPrice) / totalPrice);
 }
 
+// ------------------------------------------------------------------ munafa history (v52)
+//
+// Masla: munafa = wasooli × (qeemat − khareed) ÷ qeemat AAJ ke plan se nikalta tha. Saman badalne / qisten dobara
+// banane (izafi charge) par qeemat / khareed badal jati => pichhle mahinon ki report ka munafa bhi badal jata.
+// Hal: badalne se pehle "ab tak ki wasooli" ki rate jam (plan.profitHistory = [[tak, rate], ...]). Us ke baad ki
+// wasooli ki rate = (naya kul munafa − jama hua munafa) ÷ (nayi qeemat − jama hui wasooli) — DB ki asal payments se
+// har dafa dobara nikalti hai, is liye der se sync hui / delete hui payment ke baad bhi plan poora hone par kul munafa
+// = qeemat − khareed − chhoot (bilkul barabar).
+
+/// Munafa history ka ek hissa: [until] se PEHLE (paidAt < until) ki wasooli par [rate] (null = khareed maloom nahi thi).
+class ProfitSeg {
+  final int until;
+  final double? rate;
+  const ProfitSeg(this.until, this.rate);
+}
+
+List<ProfitSeg> parseProfitHistory(String raw) {
+  if (raw.trim().isEmpty) return const [];
+  try {
+    final v = jsonDecode(raw);
+    if (v is! List) return const [];
+    final out = <ProfitSeg>[];
+    for (final e in v) {
+      if (e is List && e.isNotEmpty && e[0] is num) {
+        final r = e.length > 1 && e[1] is num ? (e[1] as num).toDouble() : null;
+        out.add(ProfitSeg((e[0] as num).toInt(), r));
+      }
+    }
+    out.sort((a, b) => a.until.compareTo(b.until));
+    return out;
+  } catch (_) {
+    return const [];
+  }
+}
+
+String encodeProfitHistory(List<ProfitSeg> h) => h.isEmpty ? '' : jsonEncode([for (final x in h) [x.until, x.rate]]);
+
+/// Plan ki ek wasooli (munafa ke liye): kab, kitni, chhoot hai?
+typedef PlanPay = ({int paidAt, double amount, bool discount});
+
+/// Plan ki har wasooli ki munafa rate (us hi tarteeb mein). null = khareed maloom nahi (munafa nahi nikalta).
+/// History khaali => purana tareeqa: (qeemat − khareed) ÷ qeemat.
+List<double?> planPayRates({
+  required double totalPrice,
+  required double costPrice,
+  required List<ProfitSeg> history,
+  required List<PlanPay> pays,
+}) {
+  final known = costPrice > 0 && totalPrice > 0;
+  double? segRate(int at) {
+    for (final s in history) {
+      if (at < s.until) return s.rate;
+    }
+    return null;
+  }
+
+  final lastUntil = history.isEmpty ? null : history.last.until;
+  double? current;
+  if (known) {
+    if (lastUntil == null) {
+      current = (totalPrice - costPrice) / totalPrice;
+    } else {
+      double s = 0, a = 0;
+      for (final p in pays) {
+        if (p.paidAt >= lastUntil) continue;
+        a += p.amount;
+        final r = segRate(p.paidAt);
+        if (r != null) s += p.amount * r;
+      }
+      final left = totalPrice - a;
+      current = left > 0.005 ? ((totalPrice - costPrice) - s) / left : 0;
+    }
+  }
+  return [for (final p in pays) (lastUntil != null && p.paidAt < lastUntil) ? segRate(p.paidAt) : current];
+}
+
+/// Plan badalne (saman / qisten) se FORAN pehle: ab tak ki wasooli ki rate jamao (purane plan ki qeemat / khareed se).
+/// Wasooli na ho (ya pichhle jam ke baad koi nayi nahi) to history wahi.
+List<ProfitSeg> freezeProfitHistory({
+  required double totalPrice,
+  required double costPrice,
+  required List<ProfitSeg> history,
+  required List<PlanPay> pays,
+  required int now,
+}) {
+  final after = history.isEmpty ? pays : pays.where((p) => p.paidAt >= history.last.until).toList();
+  if (after.isEmpty) return history;
+  final rates = planPayRates(totalPrice: totalPrice, costPrice: costPrice, history: history, pays: after);
+  return [...history, ProfitSeg(now, rates.first)];
+}
+
+/// Plan ka ab tak ka munafa (wasooli ka hissa − chhoot). null = khareed maloom nahi.
+double? planRealizedProfit({
+  required double totalPrice,
+  required double costPrice,
+  required List<ProfitSeg> history,
+  required List<PlanPay> pays,
+}) {
+  if (costPrice <= 0 || totalPrice <= 0) return null;
+  final rates = planPayRates(totalPrice: totalPrice, costPrice: costPrice, history: history, pays: pays);
+  double v = 0;
+  for (var i = 0; i < pays.length; i++) {
+    v += pays[i].amount * (rates[i] ?? 0) - (pays[i].discount ? pays[i].amount : 0);
+  }
+  return _r2(v);
+}
+
 /// Report ke liye ek wasooli + us ke plan ki qeemat (DB join ka saada roop).
 class ProfitPayRow {
   final int paidAt;
@@ -223,8 +331,20 @@ class ProfitPayRow {
 
   /// Chhoot (kind = discount): munafa ghatata hai.
   final bool discount;
+
+  /// Munafa history (v52) se is wasooli ki rate. Diya ho to [totalPrice] / [costPrice] ki jagah yahi.
+  /// [rateGiven] true aur [rate] null => khareed maloom nahi.
+  final double? rate;
+  final bool rateGiven;
   const ProfitPayRow(
-      {required this.paidAt, required this.amount, this.fine = 0, required this.totalPrice, required this.costPrice, this.discount = false});
+      {required this.paidAt,
+      required this.amount,
+      this.fine = 0,
+      required this.totalPrice,
+      required this.costPrice,
+      this.discount = false,
+      this.rate,
+      this.rateGiven = false});
 }
 
 class ProfitReport {
@@ -289,20 +409,22 @@ ProfitReport profitReport({
   double disc = 0;
   for (final p in payments) {
     if (p.paidAt < from || p.paidAt >= to) continue;
+    // Rate: munafa history (v52) se di gayi, warna purana tareeqa (aaj ke plan ki qeemat / khareed).
+    final double? rate = p.rateGiven
+        ? p.rate
+        : (p.costPrice > 0 && p.totalPrice > 0 ? (p.totalPrice - p.costPrice) / p.totalPrice : null);
     if (p.discount) {
       // Chhoot D: qist mein D ka hissa (D × munafa%) ginti mein aata, phir poora D kam — kul asar −D × (khareed / qist qeemat).
       disc += p.amount;
-      if (p.costPrice > 0 && p.totalPrice > 0) {
-        profit += p.amount * (p.totalPrice - p.costPrice) / p.totalPrice - p.amount;
-      }
+      if (rate != null) profit += p.amount * rate - p.amount;
       continue;
     }
     fines += p.fine;
-    if (p.costPrice <= 0 || p.totalPrice <= 0) {
+    if (rate == null) {
       without += p.amount;
     } else {
       withCost += p.amount;
-      profit += p.amount * (p.totalPrice - p.costPrice) / p.totalPrice; // gol aakhir mein (har line par nahi)
+      profit += p.amount * rate; // gol aakhir mein (har line par nahi)
     }
   }
   final ex = <String, double>{};

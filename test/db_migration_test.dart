@@ -13,7 +13,7 @@ import 'package:hanna_installment/db/app_database.dart';
 ///   2. close it and "rewind" the file to look like schema vN (drop everything added by migrations > N,
 ///      PRAGMA user_version = N),
 ///   3. re-open through AppDatabase, which runs the real _onUpgrade,
-///   4. require: user_version == 51, integrity_check ok, no FK violations, schema identical to a fresh
+///   4. require: user_version == 52, integrity_check ok, no FK violations, schema identical to a fresh
 ///      install, and every seeded row unchanged.
 ///
 /// Limits (be honest): rewinding is derived from the migration code, not from real old database files, so
@@ -41,6 +41,7 @@ void main() {
   // ---- what each migration step added (version -> things to remove when rewinding below it) ----
   final steps = <_Step>[
     _Step(51, columns: {'inst_guarantors': ['phone2']}),
+    _Step(52, columns: {'inst_plans': ['profitHistory']}),
     _Step(50, indexes: ['index_customer_profiles_server', 'index_inst_guarantors_server', 'index_inst_categories_server', 'index_inst_items_server', 'index_inst_plans_server', 'index_inst_schedule_server', 'index_inst_payments_server', 'index_inst_price_changes_server', 'index_inst_suppliers_server', 'index_inst_purchases_server', 'index_inst_supplier_payments_server', 'index_inst_customer_receipts_server', 'index_inst_cash_sales_server', 'index_inst_purchase_returns_server', 'index_inst_schedule_due', 'index_inst_items_purchase', 'index_inst_plans_item', 'index_inst_cash_sales_item']),
     _Step(49, tables: ['inst_customer_receipts'], columns: {'customer_profiles': ['openingBalance', 'openingDue']}),
     _Step(48, columns: {'inst_items': ['instPrice']}),
@@ -185,7 +186,7 @@ void main() {
   test('fresh install: schema version, integrity, default seed rows', () async {
     final db = await AppDatabase.instance.database;
     await expectHealthy(db);
-    expect(AppDatabase.schemaVersion, 51);
+    expect(AppDatabase.schemaVersion, 52);
     expect((await db.query('categories')).map((r) => r['name']), contains('General'));
     expect((await db.query('units')).map((r) => r['name']), contains('pcs'));
   });

@@ -46,6 +46,9 @@ class InstPlan {
   final int createdAt;
   final int closedAt;
 
+  /// v52: munafa history (JSON) — saman / qisten badalne se pehle ki wasooli ki jami hui rate.
+  final String profitHistory;
+
   const InstPlan({
     required this.id,
     required this.planNo,
@@ -71,6 +74,7 @@ class InstPlan {
     required this.createdBy,
     required this.createdAt,
     required this.closedAt,
+    this.profitHistory = '',
   });
 
   bool get isActive => status == planActive;
@@ -104,9 +108,26 @@ class InstPlan {
       createdBy: s('createdBy'),
       createdAt: i('createdAt'),
       closedAt: i('closedAt'),
+      profitHistory: s('profitHistory'),
     );
   }
 }
+
+/// Plan ki payments munafa hisaab ke liye (advance + qist + chhoot; fine alag).
+List<PlanPay> planPaysOf(Iterable<InstPayment> ps) =>
+    [for (final p in ps) (paidAt: p.paidAt, amount: p.amount, discount: p.kind == payDiscount)];
+
+/// Plan ka ab tak ka munafa (history ke saath). null = khareed maloom nahi.
+double? planRealizedProfitOf(InstPlan plan, Iterable<InstPayment> ps) => planRealizedProfit(
+    totalPrice: plan.totalPrice, costPrice: plan.costPrice, history: parseProfitHistory(plan.profitHistory), pays: planPaysOf(ps));
+
+/// Plan ki qeemat / khareed badalne se pehle: ab tak ki wasooli ka munafa jamao (purani reports na badlein).
+String frozenProfitHistoryOf(InstPlan plan, Iterable<InstPayment> ps, int now) => encodeProfitHistory(freezeProfitHistory(
+    totalPrice: plan.totalPrice,
+    costPrice: plan.costPrice,
+    history: parseProfitHistory(plan.profitHistory),
+    pays: planPaysOf(ps),
+    now: now));
 
 class InstPayment {
   final int id;
@@ -629,6 +650,8 @@ class InstPlanRepository {
             'installmentTotal': v.plan.installmentTotal + x,
             'totalPrice': v.plan.totalPrice + x,
             'profit': v.plan.profit + x,
+            // Izafi charge se qeemat badli: pehle ki wasooli ka munafa jam (pichhle mahinon ki report wahi rahe).
+            if (x != 0) 'profitHistory': frozenProfitHistoryOf(v.plan, v.payments, _now()),
             'note': [v.plan.note, rec].where((t) => t.isNotEmpty).join('\n'),
             'updatedAt': _now(),
           },
@@ -683,6 +706,8 @@ class InstPlanRepository {
             'totalPrice': v.plan.totalPrice + d,
             'installmentTotal': v.plan.installmentTotal + d,
             'profit': v.plan.profit + d - costDiff,
+            // Qeemat / khareed badli: pehle ki wasooli ka munafa purane saman ke hisaab se jam.
+            'profitHistory': frozenProfitHistoryOf(v.plan, v.payments, _now()),
             'count': lines.length,
             'firstDueDate': lines.first.$1,
             'note': [v.plan.note, rec].where((t) => t.isNotEmpty).join('\n'),
@@ -805,23 +830,54 @@ class InstPlanRepository {
     return periodReport(payments: pays, plans: plans, closures: closures, from: from, to: to);
   }
 
+  /// Ek wasooli ki report row. Munafa history wale plan (v52) ki rate us plan ki SAB payments se (cache: ek report).
+  Future<ProfitPayRow> _profitRow(DatabaseExecutor db, Map<String, Object?> r, Map<int, Map<int, double?>> cache) async {
+    final total = ((r['totalPrice'] as num?) ?? 0).toDouble();
+    final cost = ((r['costPrice'] as num?) ?? 0).toDouble();
+    final hist = parseProfitHistory((r['profitHistory'] as String?) ?? '');
+    double? rate;
+    var given = false;
+    if (hist.isNotEmpty) {
+      final planId = (r['planId'] as num).toInt();
+      var m = cache[planId];
+      if (m == null) {
+        final all = await db.query('inst_payments',
+            columns: ['id', 'paidAt', 'amount', 'kind'], where: 'planId = ?', whereArgs: [planId], orderBy: 'paidAt, id');
+        final pays = [
+          for (final x in all)
+            (paidAt: ((x['paidAt'] as num?) ?? 0).toInt(), amount: ((x['amount'] as num?) ?? 0).toDouble(), discount: x['kind'] == payDiscount)
+        ];
+        final rates = planPayRates(totalPrice: total, costPrice: cost, history: hist, pays: pays);
+        m = {for (var i = 0; i < all.length; i++) (all[i]['id'] as num).toInt(): rates[i]};
+        cache[planId] = m;
+      }
+      rate = m[(r['id'] as num).toInt()];
+      given = true;
+    }
+    return ProfitPayRow(
+      paidAt: (r['paidAt'] as num).toInt(),
+      amount: ((r['amount'] as num?) ?? 0).toDouble(),
+      fine: ((r['fine'] as num?) ?? 0).toDouble(),
+      totalPrice: total,
+      costPrice: cost,
+      discount: r['kind'] == payDiscount,
+      rate: rate,
+      rateGiven: given,
+    );
+  }
+
   /// Munafa (Step 9): muddat ki wasooli ka munafe wala hissa + fine − kharche (expenses table: salary / kiraya / bills samet).
   Future<ProfitReport> profit({required int from, required int to}) async {
     final db = await AppDatabase.instance.database;
+    final rateCache = <int, Map<int, double?>>{};
     final pays = [
       for (final r in await db.rawQuery('''
-        SELECT p.paidAt AS paidAt, p.kind AS kind, p.amount AS amount, p.fine AS fine, pl.totalPrice AS totalPrice, pl.costPrice AS costPrice
+        SELECT p.id AS id, p.planId AS planId, p.paidAt AS paidAt, p.kind AS kind, p.amount AS amount, p.fine AS fine,
+               pl.totalPrice AS totalPrice, pl.costPrice AS costPrice, pl.profitHistory AS profitHistory
         FROM inst_payments p JOIN inst_plans pl ON pl.id = p.planId
         WHERE p.paidAt >= ? AND p.paidAt < ?
       ''', [from, to]))
-        ProfitPayRow(
-          paidAt: (r['paidAt'] as num).toInt(),
-          amount: ((r['amount'] as num?) ?? 0).toDouble(),
-          fine: ((r['fine'] as num?) ?? 0).toDouble(),
-          totalPrice: ((r['totalPrice'] as num?) ?? 0).toDouble(),
-          costPrice: ((r['costPrice'] as num?) ?? 0).toDouble(),
-          discount: r['kind'] == payDiscount,
-        )
+        await _profitRow(db, r, rateCache),
     ];
     final ex = [
       for (final r in await db.rawQuery('SELECT createdAt, category, amount FROM expenses WHERE createdAt >= ? AND createdAt < ?', [from, to]))

@@ -235,6 +235,40 @@ void main() {
       expect(await itemStatus(other), itemSold);
     });
 
+    test('munafa history: saman badalne se pichhle mahine ka munafa nahi badalta, kul munafa barabar', () async {
+      // Plan 1,000 (khareed 800, munafa 200). 2 mahine pehle 400 mile => us mahine ka munafa 400 × 20% = 80.
+      final old = dayFromNow(-60);
+      await repo.receive(planId, amount: 400, paidAt: old);
+      Future<double> profitIn(int from, int to) async => (await repo.profit(from: from, to: to)).realizedProfit;
+      final janFrom = dayFromNow(-61), janTo = dayFromNow(-59);
+      expect(await profitIn(janFrom, janTo), closeTo(80, 0.01));
+
+      // Saman badla: naya 1,200 ka (khareed 900, kul munafa 300).
+      final other = await newItem('A30', cost: 900);
+      await repo.exchange(planId, newItemId: other, priceDiff: 200, count: 2, firstDue: dayFromNow(10));
+      expect(await profitIn(janFrom, janTo), closeTo(80, 0.01), reason: 'purana mahina wahi (pehle 100 ban jata)');
+
+      // Baqi 800 aaj => (300 − 80) = 220 munafa; kul 300 = 1,200 − 900.
+      await repo.receive(planId, amount: 800);
+      final all = await profitIn(0, dayFromNow(2));
+      expect(all, closeTo(300, 0.01));
+      final pv = await v();
+      expect(pv.plan.status, planCompleted);
+      expect(planRealizedProfitOf(pv.plan, pv.payments), closeTo(300, 0.01));
+      expect(await profitIn(janFrom, janTo), closeTo(80, 0.01));
+    });
+
+    test('munafa history: izafi charge (reschedule) sirf aage ki wasooli mein', () async {
+      final old = dayFromNow(-60);
+      await repo.receive(planId, amount: 500, paidAt: old); // 500 × 20% = 100
+      await repo.reschedule(planId, count: 2, firstDue: dayFromNow(10), frequency: freqMonthly, extra: 100);
+      Future<double> profitIn(int from, int to) async => (await repo.profit(from: from, to: to)).realizedProfit;
+      expect(await profitIn(dayFromNow(-61), dayFromNow(-59)), closeTo(100, 0.01));
+      await repo.receive(planId, amount: 600); // baqi: (300 − 100) = 200
+      expect(await profitIn(0, dayFromNow(2)), closeTo(300, 0.01));
+      expect(await profitIn(dayFromNow(-1), dayFromNow(2)), closeTo(200, 0.01));
+    });
+
     test('wahi piece ya bika hua piece rad', () async {
       await expectLater(
           repo.exchange(planId, newItemId: itemId, priceDiff: 0, count: 2, firstDue: dayFromNow(10)), throwsArgumentError);

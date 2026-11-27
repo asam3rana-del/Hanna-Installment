@@ -23,7 +23,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const _dbName = 'hanna_installment.db';
-  static const _dbVersion = 51;
+  static const _dbVersion = 52;
 
   Database? _db;
 
@@ -680,6 +680,11 @@ class AppDatabase {
       // v51: zamin (guarantor) ka doosra phone number.
       await _addColumnIfMissing(db, 'inst_guarantors', 'phone2', "TEXT NOT NULL DEFAULT ''");
     }
+    if (oldVersion < 52) {
+      // v52: munafa history — saman badalne / qisten dobara banane se pehle ki wasooli ka munafa jam (purani
+      // reports na badlein). JSON [[tak (ms), rate ya null], ...]; khaali = purana tareeqa.
+      await _addColumnIfMissing(db, 'inst_plans', 'profitHistory', "TEXT NOT NULL DEFAULT ''");
+    }
     // products.searchTag was added to _onCreate WITHOUT a migration step, so a database created by the
     // earliest builds (schema v1) never got the column. Found by the real-file migration test
     // (test/db_migration_fixtures_test.dart, legacy_v1.db). Idempotent: does nothing when the column exists.
@@ -1099,7 +1104,8 @@ class AppDatabase {
         createdAt INTEGER NOT NULL DEFAULT 0,
         updatedAt INTEGER NOT NULL DEFAULT 0,
         closedAt INTEGER NOT NULL DEFAULT 0,
-        serverId TEXT
+        serverId TEXT,
+        profitHistory TEXT NOT NULL DEFAULT ''
       )
     ''',
     'CREATE INDEX IF NOT EXISTS index_inst_plans_customer ON inst_plans (customerId, status)',

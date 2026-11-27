@@ -23,7 +23,6 @@ import 'inst_pdf.dart';
 import 'inst_photo_widgets.dart';
 import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
-import 'inst_reports.dart' show profitShare;
 import 'inst_cash_sale_repository.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_repository.dart';
@@ -1633,7 +1632,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
       if (kShowProfitOutsideReports && Session.isAdminOrManager && v.plan.costPrice > 0)
         Text(
           // Discount: qist mein ginti hoti hai magar paisa nahi aata — munafe se poora kam.
-          '${Loc.t('Profit', 'منافع')}: ${instRs((profitShare(collected: st.paid + v.advancePaid, totalPrice: v.plan.totalPrice, costPrice: v.plan.costPrice) ?? 0) - v.discountGiven)}'
+          '${Loc.t('Profit', 'منافع')}: ${instRs(planRealizedProfitOf(v.plan, v.payments) ?? 0)}'
           ' ${Loc.t('received of', 'وصول، کل')} ${instRs(v.plan.totalPrice - v.plan.costPrice - v.discountGiven)}',
           style: TextStyle(color: p.textMuted, fontSize: 11.5),
         ),
