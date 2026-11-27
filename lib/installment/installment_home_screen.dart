@@ -498,7 +498,7 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
         () => _push(const InstItemsScreen()));
     final tPlans = _Tile(Icons.request_quote_outlined, Loc.t('Installments', 'قسطیں'), Loc.t('${_col.activePlans} active plans', '${_col.activePlans} جاری پلان'), p.navy,
         () => _push(const InstPlansScreen()));
-    final tScan = _Tile(Icons.qr_code_scanner, Loc.t('Scan & Sell', 'اسکین سے سیل'), Loc.t('Scan IMEI -> qist / cash', 'IMEI اسکین -> قسط / نقد'), p.purple,
+    final tScan = _Tile(Icons.qr_code_scanner, Loc.t('Scan: sale / purchase', 'اسکین: سیل / خریداری'), Loc.t('IMEI -> qist, cash or new stock', 'IMEI -> قسط، نقد یا نیا اسٹاک'), p.purple,
         () => _push(const InstScanSaleScreen()));
     final tRemind = _Tile(Icons.send_to_mobile_outlined, Loc.t('Send Reminders', 'یاد دہانی بھیجیں'), Loc.t('WhatsApp to all due', 'سب کو واٹس ایپ'), p.teal,
         () => _push(const InstBulkRemindScreen()));

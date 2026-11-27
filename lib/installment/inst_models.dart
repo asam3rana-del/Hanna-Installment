@@ -455,6 +455,9 @@ class Guarantor {
   final String fatherName;
   final String cnic;
   final String phone;
+
+  /// Doosra number (v51).
+  final String phone2;
   final String address;
 
   /// Customer se rishta (bhai, dost, padosi...).
@@ -470,6 +473,7 @@ class Guarantor {
     this.fatherName = '',
     this.cnic = '',
     this.phone = '',
+    this.phone2 = '',
     this.address = '',
     this.relation = '',
     this.occupation = '',
@@ -484,6 +488,7 @@ class Guarantor {
         'fatherName': fatherName,
         'cnic': cnic,
         'phone': phone,
+        'phone2': phone2.trim(),
         'address': address,
         'relation': relation,
         'occupation': occupation,
@@ -498,6 +503,7 @@ class Guarantor {
         fatherName: (m['fatherName'] as String?) ?? '',
         cnic: (m['cnic'] as String?) ?? '',
         phone: (m['phone'] as String?) ?? '',
+        phone2: (m['phone2'] as String?) ?? '',
         address: (m['address'] as String?) ?? '',
         relation: (m['relation'] as String?) ?? '',
         occupation: (m['occupation'] as String?) ?? '',

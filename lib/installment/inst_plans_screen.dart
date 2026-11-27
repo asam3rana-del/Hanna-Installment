@@ -14,6 +14,7 @@ import '../utils/desktop_layout.dart';
 import '../services/payment_info.dart';
 import '../utils/loc.dart';
 import '../widgets/party_avatar.dart';
+import 'inst_scan.dart';
 import 'inst_exports.dart';
 import 'inst_customers_screen.dart';
 import 'inst_items_screen.dart';
@@ -462,6 +463,14 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
     if (picked is InstCustomerRow) await _setCustomer(picked);
   }
 
+  /// Dabbe ka barcode / IMEI scan => stock ka wahi piece chun lo.
+  Future<void> _scanItem() async {
+    final items = await InstRepository.instance.items(status: itemInStock);
+    if (!mounted) return;
+    final it = await scanStockItem(context, items);
+    if (it != null && mounted) _setItem(it);
+  }
+
   Future<void> _pickItem() async {
     final items = await InstRepository.instance.items(status: itemInStock);
     final cats = {for (final c in await InstRepository.instance.categories()) c.id: c.name};
@@ -907,12 +916,26 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
   Widget _itemCard(AppPalette p) {
     final it = _item;
     if (it == null) {
-      return OutlinedButton.icon(
+      final choose = OutlinedButton.icon(
         style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56)),
         icon: const Icon(Icons.inventory_2_outlined),
         label: Text(Loc.t('Choose item from stock', 'اسٹاک سے سامان چنیں')),
         onPressed: _pickItem,
       );
+      if (!instHasCamera) return choose; // PC: list ke search mein USB scanner / IMEI likhein
+      return Row(children: [
+        Expanded(child: choose),
+        const SizedBox(width: 10),
+        SizedBox(
+          height: 56,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: p.teal),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(Loc.t('Scan', 'اسکین')),
+            onPressed: _scanItem,
+          ),
+        ),
+      ]);
     }
     return Container(
       padding: const EdgeInsets.all(14),

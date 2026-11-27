@@ -877,6 +877,21 @@ class _InstCustomerDetailScreenState extends State<InstCustomerDetailScreen> {
           const SizedBox(height: 6),
           instInfoLine(p, Loc.t('CNIC', 'شناختی کارڈ'), g.cnic),
           instInfoLine(p, Loc.t('Phone', 'فون'), g.phone),
+          if (g.phone2.isNotEmpty)
+            Row(children: [
+              Expanded(child: instInfoLine(p, Loc.t('Phone 2', 'فون 2'), g.phone2)),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: Icon(Icons.call_outlined, color: p.teal, size: 20),
+                onPressed: () => _call(g.phone2),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: 'WhatsApp',
+                icon: const Icon(Icons.chat_outlined, color: Color(0xFF128C7E), size: 20),
+                onPressed: () => sendOnWhatsApp(context, phone: g.phone2, text: ''),
+              ),
+            ]),
           instInfoLine(p, Loc.t('Address', 'پتہ'), g.address),
           instInfoLine(p, Loc.t('Job / business', 'روزگار'), g.occupation),
           if (g.id != null) ...[
@@ -903,6 +918,7 @@ class _InstGuarantorFormScreenState extends State<InstGuarantorFormScreen> {
   late final _father = TextEditingController(text: widget.existing?.fatherName ?? '');
   late final _cnic = TextEditingController(text: widget.existing?.cnic ?? '');
   late final _phone = TextEditingController(text: widget.existing?.phone ?? '');
+  late final _phone2 = TextEditingController(text: widget.existing?.phone2 ?? '');
   late final _address = TextEditingController(text: widget.existing?.address ?? '');
   late final _relation = TextEditingController(text: widget.existing?.relation ?? '');
   late final _occupation = TextEditingController(text: widget.existing?.occupation ?? '');
@@ -946,7 +962,7 @@ class _InstGuarantorFormScreenState extends State<InstGuarantorFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _father, _cnic, _phone, _address, _relation, _occupation]) {
+    for (final c in [_name, _father, _cnic, _phone, _phone2, _address, _relation, _occupation]) {
       c.dispose();
     }
     super.dispose();
@@ -983,6 +999,7 @@ class _InstGuarantorFormScreenState extends State<InstGuarantorFormScreen> {
         fatherName: _father.text,
         cnic: _cnic.text,
         phone: _phone.text,
+        phone2: _phone2.text,
         address: _address.text,
         relation: _relation.text,
         occupation: _occupation.text,
@@ -1031,6 +1048,8 @@ class _InstGuarantorFormScreenState extends State<InstGuarantorFormScreen> {
             ),
             gap(),
             TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: instDeco(p, Loc.t('Phone', 'فون'), hint: '03xx xxxxxxx')),
+            gap(),
+            TextField(controller: _phone2, keyboardType: TextInputType.phone, decoration: instDeco(p, Loc.t('Second phone', 'دوسرا فون'), hint: Loc.t('optional', 'اختیاری'))),
             gap(),
             TextField(controller: _relation, decoration: instDeco(p, Loc.t('Relation (brother, friend...)', 'رشتہ (بھائی، دوست...)'))),
             gap(),

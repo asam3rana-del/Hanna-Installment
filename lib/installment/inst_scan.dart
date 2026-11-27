@@ -7,12 +7,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart'
     show BarcodeCapture, BarcodeFormat, DetectionSpeed, MobileScanner, MobileScannerController;
 
+import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_items_screen.dart';
 import 'inst_models.dart';
 import 'inst_plans_screen.dart';
+import 'inst_purchase_screens.dart';
 import 'inst_repository.dart';
 import 'inst_ui.dart';
 
@@ -69,6 +71,34 @@ List<InstItem> matchScan(List<InstItem> items, List<String> candidates) {
   return exact.isNotEmpty ? exact : partial;
 }
 
+// ================================================================== chhote helpers (sale / purchase screens)
+
+/// Live camera scan mumkin hai? (Android / iOS; PC par USB / Bluetooth scanner search mein likhta hai.)
+bool get instHasCamera => Platform.isAndroid || Platform.isIOS;
+
+/// Stock mein se camera scan se piece chunein: jo barcode stock ke kisi piece (IMEI / serial) se mile wahi wapas.
+/// Na mile to scan jari rehta hai (dabbe ka doosra barcode); wapas aane par null.
+Future<InstItem?> scanStockItem(BuildContext context, List<InstItem> stock) async {
+  final inStock = stock.where((i) => i.inStock).toList();
+  InstItem? hit;
+  final code = await Navigator.of(context).push<String>(MaterialPageRoute(
+      builder: (_) => InstBarcodeScanPage(accept: (v) {
+            final m = matchScan(inStock, scanCandidates(v));
+            if (m.isEmpty) return false;
+            hit = m.first;
+            return true;
+          })));
+  return code == null ? null : hit;
+}
+
+/// Naye piece ka pehchan number (IMEI / serial) camera se. [skip] = pehle se list / stock wale (dobara na lein).
+Future<String?> scanNewCode(BuildContext context, {bool imeiOnly = false, Set<String> skip = const {}}) {
+  return Navigator.of(context).push<String>(MaterialPageRoute(
+      builder: (_) => InstBarcodeScanPage(
+          accept: (v) =>
+              (imeiOnly ? RegExp(r'^\d{15}$').hasMatch(v.trim()) : v.trim().length >= 4) && !skip.contains(normalizeIdValue(v)))));
+}
+
 // ================================================================== screen
 
 /// Scanner se sale (Step 19): IMEI / serial scan karo -> piece milta hai -> Naqd sale ya Qist par.
@@ -88,6 +118,7 @@ class _InstScanSaleScreenState extends State<InstScanSaleScreen> {
   List<InstCategory> _cats = const [];
   List<InstItem>? _found;
   String _info = '';
+  String _lastCode = ''; // stock mein na mila number (naye bill ke liye)
   bool _busy = false;
 
   bool get _hasCamera => !Platform.isWindows && !Platform.isLinux && !Platform.isMacOS;
@@ -121,6 +152,7 @@ class _InstScanSaleScreenState extends State<InstScanSaleScreen> {
     final found = matchScan(_items, cands);
     setState(() {
       _found = found;
+      _lastCode = cands.isEmpty ? '' : cands.first;
       _info = cands.isEmpty
           ? Loc.t('No number found. Try again closer, in good light.', 'کوئی نمبر نہیں ملا۔ قریب سے، روشنی میں دوبارہ کوشش کریں۔')
           : found.isEmpty
@@ -220,6 +252,17 @@ class _InstScanSaleScreenState extends State<InstScanSaleScreen> {
             if (_info.isNotEmpty) Text(_info, style: TextStyle(color: found != null && found.isEmpty ? p.red : p.textMuted)),
             if (found != null)
               for (final it in found) _result(p, it),
+            // Stock mein nahi: isi number se naya khareed bill (sirf Admin / Manager).
+            if (found != null && found.isEmpty && _lastCode.isNotEmpty && Session.isAdminOrManager)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: p.navyLight, minimumSize: const Size.fromHeight(48)),
+                  onPressed: () => _go(InstNewPurchaseScreen(initialCode: _lastCode)),
+                  icon: const Icon(Icons.local_shipping_outlined),
+                  label: Text(Loc.t('Add to stock (new purchase): $_lastCode', 'اسٹاک میں ڈالیں (نئی خریداری): $_lastCode')),
+                ),
+              ),
           ]),
         ),
       ]),

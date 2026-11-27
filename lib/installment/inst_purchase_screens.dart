@@ -190,7 +190,10 @@ class _InstPurchasesScreenState extends State<InstPurchasesScreen> {
 
 class InstNewPurchaseScreen extends StatefulWidget {
   final int? supplierId;
-  const InstNewPurchaseScreen({super.key, this.supplierId});
+
+  /// Scan & Sell par stock mein na mila number: naye bill ka pehla piece isi IMEI / serial ke saath khulta hai.
+  final String? initialCode;
+  const InstNewPurchaseScreen({super.key, this.supplierId, this.initialCode});
 
   @override
   State<InstNewPurchaseScreen> createState() => _InstNewPurchaseScreenState();
@@ -233,6 +236,36 @@ class _InstNewPurchaseScreenState extends State<InstNewPurchaseScreen> {
       _loaded = true;
       if (_supplierId != null && !s.any((r) => r.supplier.id == _supplierId)) _supplierId = null;
     });
+    final code = widget.initialCode?.trim() ?? '';
+    if (code.isNotEmpty && _items.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _addWithCode(code);
+      });
+    }
+  }
+
+  /// Is category ka pehla pehchan field (IMEI 1 / serial / engine).
+  String _idField(int? catId) {
+    final cat = _cats.where((c) => c.id == catId).firstOrNull;
+    return cat != null && cat.idFields.isNotEmpty ? cat.idFields.first : 'IMEI 1';
+  }
+
+  /// Naya piece jis ka IMEI / serial [code] ho: pichle piece jaisa (model / qeemat) ya khaali form.
+  Future<void> _addWithCode(String code) async {
+    if (_cats.isEmpty) return instToast(context, Loc.t('Add a category first.', 'پہلے کیٹیگری بنائیں۔'));
+    final base = _items.isNotEmpty ? _items.last : InstItem(categoryId: _cats.first.id!, model: '');
+    await _addPiece(template: base.copyWith(idValues: {_idField(base.categoryId): code}));
+  }
+
+  /// Dabbe ka barcode scan => naya piece (pehle se list / stock wala number dobara nahi).
+  Future<void> _scanOne() async {
+    final have = {for (final it in _items) ...it.idValues.values.map(normalizeIdValue)};
+    for (final it in await InstRepository.instance.items()) {
+      have.addAll(it.idValues.values.map(normalizeIdValue));
+    }
+    if (!mounted) return;
+    final code = await scanNewCode(context, skip: have);
+    if (code != null && mounted) await _addWithCode(code.trim());
   }
 
   double get _total => _items.fold<double>(0, (a, i) => a + i.costPrice);
@@ -431,6 +464,15 @@ class _InstNewPurchaseScreenState extends State<InstNewPurchaseScreen> {
                         label: Text(Loc.t('Same model: scan many boxes', 'یہی ماڈل: کئی ڈبے اسکین کریں')),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                  ],
+                  if (kShowScan && instHasCamera) ...[
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(backgroundColor: p.teal, minimumSize: const Size.fromHeight(48)),
+                      onPressed: _scanOne,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: Text(Loc.t('Scan box barcode (new piece)', 'ڈبے کا بارکوڈ اسکین کریں (نیا پیس)')),
+                    ),
                     const SizedBox(height: 8),
                   ],
                   OutlinedButton.icon(

@@ -7,6 +7,7 @@ import '../services/session.dart';
 import '../theme/theme_manager.dart';
 import '../utils/desktop_layout.dart';
 import '../utils/loc.dart';
+import 'inst_scan.dart';
 import 'inst_cash_sale_repository.dart';
 import 'inst_models.dart';
 import 'inst_plan_math.dart';
@@ -311,7 +312,16 @@ class _InstNewCashSaleScreenState extends State<InstNewCashSaleScreen> {
                           autofocus: true,
                           onChanged: (v) => setState(() => _q = v),
                           decoration: instDeco(p, Loc.t('Find piece: model, IMEI, serial', 'پیس تلاش: ماڈل، IMEI، سیریل'),
-                              suffix: const Icon(Icons.search)),
+                              suffix: instHasCamera
+                                  ? IconButton(
+                                      tooltip: Loc.t('Scan barcode', 'بارکوڈ اسکین'),
+                                      icon: Icon(Icons.qr_code_scanner, color: p.teal),
+                                      onPressed: () async {
+                                        final hit = await scanStockItem(context, _stock);
+                                        if (hit != null && mounted) setState(() => _choose(hit));
+                                      },
+                                    )
+                                  : const Icon(Icons.search)),
                         ),
                       ),
                       Expanded(

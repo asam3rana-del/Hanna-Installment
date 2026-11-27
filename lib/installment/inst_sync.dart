@@ -104,7 +104,7 @@ class InstSync {
     await SyncQueueHelper.enqueue(ex, instGuarantorType, eid, 'upsert', _stamp({
       'serverId': eid,
       'customerServerId': csid,
-      for (final k in const ['name', 'fatherName', 'cnic', 'phone', 'address', 'relation', 'occupation']) k: _s(g[k]),
+      for (final k in const ['name', 'fatherName', 'cnic', 'phone', 'phone2', 'address', 'relation', 'occupation']) k: _s(g[k]),
       'createdAt': _i(g['createdAt']),
     }));
   }
@@ -670,6 +670,8 @@ Future<void> applyInstallmentChanges(DatabaseExecutor db, Map<String, List<SyncD
       'customerId': cid,
       for (final k in const ['name', 'fatherName', 'cnic', 'phone', 'address', 'relation', 'occupation']) k: _s(d[k]),
       'updatedAt': _i(d['updatedAt']),
+      // Purana build doosra number nahi bhejta: us ki edit is ko khaali na kare.
+      if (d.containsKey('phone2')) 'phone2': _s(d['phone2']),
     };
     if (localId == null) {
       await db.insert('inst_guarantors', {...values, 'createdAt': _i(d['createdAt']), 'serverId': sid});
