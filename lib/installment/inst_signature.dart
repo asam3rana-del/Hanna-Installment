@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart' show ImageSource;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -9,10 +10,96 @@ import '../theme/theme_manager.dart';
 import '../utils/loc.dart';
 import 'inst_terms.dart';
 import 'inst_ui.dart';
+import 'kyc_photo_store.dart';
 
 /// Plan ke dastakhat KycPhotoStore mein: owner 'p', id = plan id.
 const planSignCustomer = 'signC';
 const planSignGuarantor = 'signG';
+
+/// Anguthe ke nishan ki tasveer (kaghaz par siyahi se laga kar camera se): owner 'p', id = plan id.
+const planThumbCustomer = 'thumbC';
+const planThumbGuarantor = 'thumbG';
+
+/// Anguthe ki tasveer lo: mobile par camera, PC par file. Cancel => null. (Chhoti: 900px, sync ke liye.)
+Future<String?> pickThumbPhoto(BuildContext context) async {
+  ImageSource src = ImageSource.gallery;
+  if (KycPhotoStore.cameraAvailable) {
+    final s = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: Text(Loc.t('Camera', 'کیمرہ')),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: Text(Loc.t('Gallery', 'گیلری')),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (s == null) return null;
+    src = s;
+  }
+  return KycPhotoStore.pickTemp(src, maxSide: 900);
+}
+
+/// Anguthe ka khaana: tasveer ho to dikhata hai, warna "tasveer lein" button.
+class ThumbPhotoTile extends StatelessWidget {
+  final String label;
+  final String? path;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+  const ThumbPhotoTile({super.key, required this.label, required this.path, required this.onPick, this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ThemeManager.palette;
+    final has = path != null && File(path!).existsSync();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: instCard(p),
+      child: Row(children: [
+        InkWell(
+          onTap: onPick,
+          child: Container(
+            width: 72,
+            height: 88,
+            decoration: BoxDecoration(border: Border.all(color: p.textMuted, width: 1.2), borderRadius: BorderRadius.circular(8)),
+            clipBehavior: Clip.antiAlias,
+            child: has
+                ? Image.file(File(path!), fit: BoxFit.cover)
+                : Icon(Icons.fingerprint, size: 40, color: p.textMuted),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(color: p.textDark, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(
+                Loc.t('Put an ink thumb mark on paper, then take its photo. Optional.',
+                    'کاغذ پر سیاہی سے انگوٹھا لگائیں، پھر اس کی تصویر لیں۔ اختیاری۔'),
+                style: TextStyle(color: p.textMuted, fontSize: 12)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, children: [
+              OutlinedButton.icon(
+                onPressed: onPick,
+                icon: const Icon(Icons.fingerprint, size: 18),
+                label: Text(has ? Loc.t('Retake', 'دوبارہ لیں') : Loc.t('Thumb photo', 'انگوٹھے کی تصویر')),
+              ),
+              if (has && onClear != null)
+                TextButton(onPressed: onClear, child: Text(Loc.t('Remove', 'ہٹائیں'))),
+            ]),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
 
 /// Ungli / stylus se dastakhat (Step 32). Bina package: lakeeren yaad, PNG mein save.
 class SignatureController extends ChangeNotifier {
@@ -128,7 +215,9 @@ class SignaturePad extends StatelessWidget {
 class AgreementSignResult {
   final String? customerSig;
   final String? guarantorSig;
-  const AgreementSignResult(this.customerSig, this.guarantorSig);
+  final String? customerThumb;
+  final String? guarantorThumb;
+  const AgreementSignResult(this.customerSig, this.guarantorSig, {this.customerThumb, this.guarantorThumb});
 }
 
 class InstAgreementSignScreen extends StatefulWidget {
@@ -146,6 +235,8 @@ class _InstAgreementSignScreenState extends State<InstAgreementSignScreen> {
   final _g = SignatureController();
   List<String> _terms = const [];
   bool _busy = false;
+  String? _thumbC;
+  String? _thumbG;
 
   @override
   void initState() {
@@ -164,14 +255,20 @@ class _InstAgreementSignScreenState extends State<InstAgreementSignScreen> {
 
   Future<void> _done(bool signed) async {
     if (_busy) return;
-    if (signed && _c.isEmpty) {
-      instToast(context, Loc.t('Customer signature is required.', 'کسٹمر کے دستخط ضروری ہیں۔'));
+    // Dastakhat ya anguthe ki tasveer — dono mein se ek zaroori (un parh customer sirf angutha).
+    if (signed && _c.isEmpty && _thumbC == null) {
+      instToast(context, Loc.t('Customer signature or thumb photo is required.', 'کسٹمر کے دستخط یا انگوٹھے کی تصویر ضروری ہے۔'));
       return;
     }
     setState(() => _busy = true);
-    final cs = signed ? await _c.toPngFile('sigC') : null;
-    final gs = signed && widget.guarantorName != null ? await _g.toPngFile('sigG') : null;
-    if (mounted) Navigator.pop(context, AgreementSignResult(cs, gs));
+    final cs = signed && !_c.isEmpty ? await _c.toPngFile('sigC') : null;
+    final gs = signed && widget.guarantorName != null && !_g.isEmpty ? await _g.toPngFile('sigG') : null;
+    if (mounted) {
+      Navigator.pop(
+          context,
+          AgreementSignResult(cs, gs,
+              customerThumb: signed ? _thumbC : null, guarantorThumb: signed && widget.guarantorName != null ? _thumbG : null));
+    }
   }
 
   @override
@@ -207,9 +304,29 @@ class _InstAgreementSignScreenState extends State<InstAgreementSignScreen> {
             ],
             const SizedBox(height: 14),
             SignaturePad(controller: _c, label: '${Loc.t('Customer signature', 'کسٹمر کے دستخط')}: ${widget.customerName}'),
+            const SizedBox(height: 8),
+            ThumbPhotoTile(
+              label: '${Loc.t('Customer thumb', 'کسٹمر کا انگوٹھا')}: ${widget.customerName}',
+              path: _thumbC,
+              onPick: () async {
+                final v = await pickThumbPhoto(context);
+                if (v != null && mounted) setState(() => _thumbC = v);
+              },
+              onClear: () => setState(() => _thumbC = null),
+            ),
             if (widget.guarantorName != null) ...[
               const SizedBox(height: 14),
               SignaturePad(controller: _g, label: '${Loc.t('Guarantor signature', 'ضامن کے دستخط')}: ${widget.guarantorName}'),
+              const SizedBox(height: 8),
+              ThumbPhotoTile(
+                label: '${Loc.t('Guarantor thumb', 'ضامن کا انگوٹھا')}: ${widget.guarantorName}',
+                path: _thumbG,
+                onPick: () async {
+                  final v = await pickThumbPhoto(context);
+                  if (v != null && mounted) setState(() => _thumbG = v);
+                },
+                onClear: () => setState(() => _thumbG = null),
+              ),
             ],
             const SizedBox(height: 20),
             instPrimaryButton(p, _busy ? Loc.t('Saving...', 'محفوظ ہو رہا ہے...') : Loc.t('Signed — create plan', 'دستخط ہو گئے — پلان بنائیں'),

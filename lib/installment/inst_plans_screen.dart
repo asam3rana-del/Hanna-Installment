@@ -628,6 +628,8 @@ class _NewInstallmentScreenState extends State<NewInstallmentScreen> {
         final kyc = KycPhotoStore.instance;
         if (sign.customerSig != null) await kyc.saveFrom(sign.customerSig!, owner: 'p', id: id, kind: planSignCustomer);
         if (sign.guarantorSig != null) await kyc.saveFrom(sign.guarantorSig!, owner: 'p', id: id, kind: planSignGuarantor);
+        if (sign.customerThumb != null) await kyc.saveFrom(sign.customerThumb!, owner: 'p', id: id, kind: planThumbCustomer);
+        if (sign.guarantorThumb != null) await kyc.saveFrom(sign.guarantorThumb!, owner: 'p', id: id, kind: planThumbGuarantor);
       } catch (_) {}
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => InstPlanDetailScreen(planId: id)));
@@ -1060,7 +1062,9 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
 
 class InstPlanDetailScreen extends StatefulWidget {
   final int planId;
-  const InstPlanDetailScreen({super.key, required this.planId});
+  /// Customer QR scan se aaye: plan khulte hi wasooli (Receive) ka dialog.
+  final bool openReceive;
+  const InstPlanDetailScreen({super.key, required this.planId, this.openReceive = false});
 
   @override
   State<InstPlanDetailScreen> createState() => _InstPlanDetailScreenState();
@@ -1070,6 +1074,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
   PlanView? _v;
   List<Guarantor> _g = const [];
   bool _loaded = false;
+  bool _autoReceiveDone = false;
 
   @override
   void initState() {
@@ -1091,6 +1096,80 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
       _g = g;
       _loaded = true;
     });
+    if (widget.openReceive && !_autoReceiveDone) {
+      _autoReceiveDone = true;
+      if (v != null && v.plan.isActive) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _receive(v);
+        });
+      } else if (v != null) {
+        instToast(context, '${v.plan.planNo}: ${planStatusLabel(v.plan.status)}');
+      }
+    }
+  }
+
+  /// Customer ka khata card (naam + plan no. + QR) — print ya WhatsApp. Agli dafa scan se seedha wasooli.
+  Future<void> _card(PlanView v) async {
+    final how = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.print_outlined),
+            title: Text(Loc.t('Print QR card', 'QR کارڈ پرنٹ کریں')),
+            onTap: () => Navigator.pop(ctx, 'print'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.send_outlined),
+            title: Text(Loc.t('Send QR card on WhatsApp', 'QR کارڈ واٹس ایپ پر بھیجیں')),
+            onTap: () => Navigator.pop(ctx, 'send'),
+          ),
+        ]),
+      ),
+    );
+    if (how == null || !mounted) return;
+    try {
+      if (how == 'print') {
+        await Printing.layoutPdf(name: 'Card ${v.plan.planNo} - ${v.customerName}', onLayout: (_) => InstPdf.cardBytes(v));
+      } else {
+        await InstPdf.sendCard(context, v);
+      }
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
+  }
+
+  /// Baad mein anguthe ki tasveer (kaghaz par lagaya tha): customer ya zamin.
+  Future<void> _thumb(PlanView v) async {
+    final kyc = KycPhotoStore.instance;
+    final who = _g.isEmpty
+        ? planThumbCustomer
+        : await showModalBottomSheet<String>(
+            context: context,
+            builder: (ctx) => SafeArea(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                ListTile(
+                  leading: const Icon(Icons.fingerprint),
+                  title: Text('${Loc.t('Customer thumb', 'کسٹمر کا انگوٹھا')}: ${v.customerName}'),
+                  onTap: () => Navigator.pop(ctx, planThumbCustomer),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.fingerprint),
+                  title: Text('${Loc.t('Guarantor thumb', 'ضامن کا انگوٹھا')}: ${_g.first.name}'),
+                  onTap: () => Navigator.pop(ctx, planThumbGuarantor),
+                ),
+              ]),
+            ),
+          );
+    if (who == null || !mounted) return;
+    final path = await pickThumbPhoto(context);
+    if (path == null || !mounted) return;
+    try {
+      await kyc.saveFrom(path, owner: 'p', id: v.plan.id, kind: who);
+      if (mounted) instToast(context, Loc.t('Thumb photo saved. It prints on the agreement.', 'انگوٹھے کی تصویر محفوظ۔ اقرار نامے پر چھپے گی۔'));
+    } catch (e) {
+      if (mounted) instToast(context, instErr(e));
+    }
   }
 
   Future<String> _receipt(PlanView v, InstPayment pay) async {
@@ -1256,6 +1335,7 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
   }
 
   Future<void> _menu(String action, PlanView v) async {
+    if (action == 'thumb') return _thumb(v);
     if (action == 'exchange') {
       final ok = await showDialog<bool>(context: context, builder: (_) => _ExchangeDialog(v: v));
       if (ok == true) await _reload();
@@ -1350,11 +1430,17 @@ class _InstPlanDetailScreenState extends State<InstPlanDetailScreen> {
                   tooltip: Loc.t('Print agreement / statement (A4)', 'اقرار نامہ / اسٹیٹمنٹ پرنٹ (A4)'),
                   icon: const Icon(Icons.print_outlined, color: Colors.white),
                   onPressed: () => _printStatement(v)),
+            if (v != null)
+              IconButton(
+                  tooltip: Loc.t('Customer QR card', 'کسٹمر QR کارڈ'),
+                  icon: const Icon(Icons.qr_code_2, color: Colors.white),
+                  onPressed: () => _card(v)),
             if (v != null && (Session.isAdminOrManager))
               PopupMenuButton<String>(
                 iconColor: Colors.white,
                 onSelected: (a) => _menu(a, v),
                 itemBuilder: (_) => [
+                  PopupMenuItem(value: 'thumb', child: Text(Loc.t('Add thumb photo', 'انگوٹھے کی تصویر لگائیں'))),
                   if (v.plan.isActive) PopupMenuItem(value: 'exchange', child: Text(Loc.t('Exchange item', 'سامان بدلیں'))),
                   if (v.plan.isActive) PopupMenuItem(value: 'reschedule', child: Text(Loc.t('Change installments (reschedule)', 'قسطیں تبدیل کریں'))),
                   if (v.plan.isActive) PopupMenuItem(value: 'repossess', child: Text(Loc.t('Take item back', 'سامان واپس لیں'))),

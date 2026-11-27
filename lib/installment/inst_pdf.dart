@@ -23,7 +23,8 @@ import 'inst_csv.dart';
 import 'inst_plan_math.dart';
 import 'inst_plan_repository.dart';
 import 'inst_repository.dart';
-import 'inst_signature.dart' show planSignCustomer, planSignGuarantor;
+import 'inst_plan_qr.dart' show instPlanQrData;
+import 'inst_signature.dart' show planSignCustomer, planSignGuarantor, planThumbCustomer, planThumbGuarantor;
 import 'inst_terms.dart';
 import 'shop_logo.dart';
 import 'kyc_photo_store.dart';
@@ -122,6 +123,37 @@ class InstPdf {
         child: _t(title, size: 11, bold: true, argb: 0xFF0F9B8E),
       );
 
+  /// Anguthe ka khaana: tasveer ho to woh, warna khaali (print ke baad siyahi se lagayein).
+  static pw.Widget _thumbBox(pw.MemoryImage? img, String caption) => pw.Column(children: [
+        pw.Container(
+          width: 44,
+          height: 54,
+          decoration: pw.BoxDecoration(border: pw.Border.all(color: _navy, width: 0.6), borderRadius: pw.BorderRadius.circular(3)),
+          child: img == null ? null : pw.Image(img, fit: pw.BoxFit.cover),
+        ),
+        pw.SizedBox(height: 1),
+        _t(caption, size: 7, argb: 0xFF8A90A6),
+      ]);
+
+  /// Customer ka QR (dukaan par scan => seedha wasooli) + dukaan ka online payment QR (ho to).
+  static pw.Widget _qrRow(String planNo, pw.MemoryImage? payQr, {required String showLabel, required String payLabel}) =>
+      pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Column(children: [
+          pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: instPlanQrData(planNo), width: 62, height: 62, drawText: false),
+          pw.SizedBox(height: 2),
+          pw.Text(planNo, style: const pw.TextStyle(fontSize: 8, color: _navy)),
+          _t(showLabel, size: 7.5, argb: 0xFF8A90A6),
+        ]),
+        if (payQr != null) ...[
+          pw.SizedBox(width: 18),
+          pw.Column(children: [
+            pw.Container(width: 62, height: 62, child: pw.Image(payQr, fit: pw.BoxFit.contain)),
+            pw.SizedBox(height: 2),
+            _t(payLabel, size: 7.5, bold: true, argb: 0xFF0F9B8E),
+          ]),
+        ],
+      ]);
+
   static pw.Widget _header(ShopHeader shop, String title, String sub) => pw.Row(children: [
         if (_logo != null) pw.Container(width: 38, height: 38, margin: const pw.EdgeInsets.only(right: 10), child: pw.Image(_logo!)),
         pw.Expanded(
@@ -181,6 +213,9 @@ class InstPdf {
     // Step 32: plan banate waqt liye gaye dastakhat.
     final sigC = await _img(kyc.pathFor('p', v.plan.id, planSignCustomer));
     final sigG = await _img(kyc.pathFor('p', v.plan.id, planSignGuarantor));
+    final thC = await _img(kyc.pathFor('p', v.plan.id, planThumbCustomer));
+    final thG = await _img(kyc.pathFor('p', v.plan.id, planThumbGuarantor));
+    final payQr = await _img(await ShopPayQr.path());
     final cB = await _img(kyc.pathFor('c', v.plan.customerId, KycPhotoStore.cnicBack));
     final gPhotos = <int, (pw.MemoryImage?, pw.MemoryImage?)>{};
     for (final g in gs) {
@@ -315,10 +350,19 @@ class InstPdf {
                   sc.returned ? '${Loc.t('returned', 'واپس')} ${_d(sc.returnedAt)}' : Loc.t('with shop', 'دکان کے پاس'),
                 ].join('  •  ')),
         ],
-        if (payInfo.isNotEmpty) ...[
+        if (payInfo.isNotEmpty || payQr != null || v.plan.planNo.isNotEmpty) ...[
           _section(Loc.t('Pay installments to', 'قسط کی ادائیگی یہاں کریں')),
-          for (final l in payInfo.split('\n'))
-            if (l.trim().isNotEmpty) _t(l.trim(), size: 10.5, bold: true),
+          pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Expanded(
+              child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                for (final l in payInfo.split('\n'))
+                  if (l.trim().isNotEmpty) _t(l.trim(), size: 10.5, bold: true),
+              ]),
+            ),
+            if (v.plan.planNo.isNotEmpty)
+              _qrRow(v.plan.planNo, payQr,
+                  showLabel: Loc.t('Show at shop', 'دکان پر دکھائیں'), payLabel: Loc.t('Scan to pay', 'اسکین کر کے ادائیگی')),
+          ]),
         ],
         if (terms.isNotEmpty) ...[
           _section(Loc.t('Terms / agreement', 'شرائط / اقرار نامہ')),
@@ -326,16 +370,24 @@ class InstPdf {
           pw.SizedBox(height: 4),
           _t(Loc.t('We have read and accept the above terms.', 'ہم نے اوپر دی گئی شرائط پڑھ کر قبول کیں۔'), size: 9, argb: 0xFF8A90A6),
         ],
-        pw.SizedBox(height: sigC != null || sigG != null ? 8 : 26),
+        pw.SizedBox(height: 10),
         pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
-          for (final (s, img) in [
-            (Loc.t('Customer signature', 'خریدار کے دستخط'), sigC),
-            (Loc.t('Guarantor signature', 'ضامن کے دستخط'), sigG),
-            (Loc.t('Shop', 'دکان'), null),
+          // Har khane mein dastakhat + anguthe ka nishan (tasveer ho to chhapti hai, warna khaali khaana siyahi ke liye).
+          for (final (s, img, thumb, hasThumb) in [
+            (Loc.t('Customer signature', 'خریدار کے دستخط'), sigC, thC, true),
+            (Loc.t('Guarantor signature', 'ضامن کے دستخط'), sigG, thG, gs.isNotEmpty),
+            (Loc.t('Shop', 'دکان'), null, null, false),
           ])
             pw.Expanded(
               child: pw.Column(children: [
-                if (img != null) pw.Container(height: 46, child: pw.Image(img, fit: pw.BoxFit.contain)),
+                pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+                  pw.Expanded(
+                    child: img != null
+                        ? pw.Container(height: 46, child: pw.Image(img, fit: pw.BoxFit.contain))
+                        : pw.SizedBox(height: hasThumb ? 46 : 30),
+                  ),
+                  if (hasThumb) pw.Padding(padding: const pw.EdgeInsets.only(right: 6), child: _thumbBox(thumb, Loc.t('Thumb', 'انگوٹھا'))),
+                ]),
                 pw.Container(
                   margin: const pw.EdgeInsets.symmetric(horizontal: 8),
                   padding: const pw.EdgeInsets.only(top: 3),
@@ -388,6 +440,7 @@ class InstPdf {
     final next = v.status.next;
     // Dukaandar ki apni Raast / JazzCash / bank tafseel (Settings) — khali ho to receipt par kuch nahi.
     final payInfo = (await PaymentInfo.load()).trim();
+    final payQr = await _img(await ShopPayQr.path());
     // Receipt hamesha English mein (Step 30) — customer / doosre log aasani se parh sakein.
 
     List<pw.Widget> build() => [
@@ -436,6 +489,13 @@ class InstPdf {
                   if (l.trim().isNotEmpty) _t(l.trim(), size: 10),
               ]),
             ),
+          if (v.plan.planNo.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 10),
+              child: pw.Center(
+                  child: _qrRow(v.plan.planNo, remainingAfter > 0.5 ? payQr : null,
+                      showLabel: 'Show this QR at the shop', payLabel: 'Scan to pay')),
+            ),
         ];
 
     final doc = _doc();
@@ -447,6 +507,73 @@ class InstPdf {
       margin: const pw.EdgeInsets.fromLTRB(26, 26, 26, 26),
       maxPages: 3,
       build: (_) => widgets,
+    ));
+    final bytes = await doc.save();
+    UrduPdf.clearCache();
+    return bytes;
+  }
+
+  // ================================================================ khata card (QR)
+
+  /// Customer ka chhota khata card (ATM card jitna): dukaan, naam, plan no., saman + bara QR. Dukaan par scan =>
+  /// seedha us plan ki wasooli. Ek A4 par 2 copy (ek customer, ek file) — kaat lein.
+  static Future<Uint8List> cardBytes(PlanView v) => _safe(() => _card(v));
+
+  static Future<Uint8List> _card(PlanView v) async {
+    await _assets();
+    final shop = await loadShopHeader();
+    final payQr = await _img(await ShopPayQr.path());
+
+    pw.Widget card() => pw.Container(
+          width: 243, // 85.6 mm
+          height: 153, // 54 mm
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(border: pw.Border.all(color: _teal, width: 1.2), borderRadius: pw.BorderRadius.circular(8)),
+          child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Expanded(
+              child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                _t(shop.name.isEmpty ? 'Hanna Installment' : shop.name, size: 11, bold: true, argb: 0xFF0F9B8E),
+                if (shop.phone.isNotEmpty) _t(shop.phone, size: 7.5, argb: 0xFF8A90A6),
+                pw.SizedBox(height: 8),
+                _t(v.customerName, size: 11, bold: true),
+                if (v.customerPhone.isNotEmpty) pw.Text(v.customerPhone, style: const pw.TextStyle(fontSize: 8, color: _gray)),
+                pw.SizedBox(height: 4),
+                _t(v.itemTitle, size: 8.5),
+                pw.Spacer(),
+                pw.Text(v.plan.planNo, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _navy)),
+                _t(Loc.t('Show this card when paying', 'قسط دیتے وقت یہ کارڈ دکھائیں'), size: 7, argb: 0xFF8A90A6),
+              ]),
+            ),
+            pw.Column(children: [
+              pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: instPlanQrData(v.plan.planNo), width: 86, height: 86, drawText: false),
+              if (payQr != null) ...[
+                pw.SizedBox(height: 4),
+                pw.Row(children: [
+                  pw.Container(width: 36, height: 36, child: pw.Image(payQr, fit: pw.BoxFit.contain)),
+                  pw.SizedBox(width: 3),
+                  pw.SizedBox(width: 46, child: _t(Loc.t('Scan to pay', 'اسکین کر کے ادائیگی'), size: 6.5, argb: 0xFF0F9B8E)),
+                ]),
+              ],
+            ]),
+          ]),
+        );
+
+    List<pw.Widget> build() => [
+          card(),
+          pw.SizedBox(height: 18),
+          pw.Text('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', style: const pw.TextStyle(fontSize: 8, color: _gray)),
+          pw.SizedBox(height: 18),
+          card(),
+        ];
+
+    final doc = _doc();
+    build();
+    await UrduPdf.flush();
+    final widgets = build();
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(36),
+      build: (_) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: widgets),
     ));
     final bytes = await doc.save();
     UrduPdf.clearCache();
@@ -606,6 +733,12 @@ class InstPdf {
     final bytes = await statementBytes(v);
     if (!context.mounted) return;
     await send(context, bytes: bytes, base: '${v.plan.planNo}_${v.customerName}', phone: v.customerPhone);
+  }
+
+  static Future<void> sendCard(BuildContext context, PlanView v) async {
+    final bytes = await cardBytes(v);
+    if (!context.mounted) return;
+    await send(context, bytes: bytes, base: 'Card_${v.plan.planNo}_${v.customerName}', phone: v.customerPhone);
   }
 
   static Future<void> sendReceipt(BuildContext context, PlanView v, InstPayment pay, {required double remainingAfter}) async {

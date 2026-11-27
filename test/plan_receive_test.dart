@@ -72,6 +72,14 @@ void main() {
 
   Future<double> remaining() async => (await repo.view(planId))!.status.remaining;
 
+  test('customer QR: plan number se plan milta hai (chhote harf bhi), ghalat number => null', () async {
+    final no = (await repo.view(planId))!.plan.planNo;
+    expect(no, startsWith('Q-'));
+    expect(await repo.planIdForNo(no), planId);
+    expect(await repo.planIdForNo(no.toLowerCase()), planId);
+    expect(await repo.planIdForNo('Q-ZZ9999'), isNull);
+  });
+
   Future<int> cashInRows() async {
     final db = await AppDatabase.instance.database;
     final r = await db.rawQuery("SELECT COUNT(*) AS n FROM cash_transactions WHERE type = 'IN'");

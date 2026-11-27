@@ -13,6 +13,7 @@ import '../utils/loc.dart';
 import 'inst_cash_sale_screens.dart';
 import 'inst_items_screen.dart';
 import 'inst_models.dart';
+import 'inst_plan_qr.dart';
 import 'inst_plans_screen.dart';
 import 'inst_purchase_screens.dart';
 import 'inst_repository.dart';
@@ -148,6 +149,15 @@ class _InstScanSaleScreenState extends State<InstScanSaleScreen> {
   }
 
   void _search(String text, {String source = ''}) {
+    // Customer ka QR (raseed / khata card) ya plan no. => seedha us plan ki wasooli.
+    final planNo = planNoFromScan(text);
+    if (planNo != null) {
+      _q.clear();
+      openPlanByNo(context, planNo).then((_) {
+        if (mounted) _loadItems();
+      });
+      return;
+    }
     final cands = scanCandidates(text);
     final found = matchScan(_items, cands);
     setState(() {
@@ -168,7 +178,7 @@ class _InstScanSaleScreenState extends State<InstScanSaleScreen> {
   /// wahi lete hain, baqi par scan chalta rehta hai.
   Future<void> _live() async {
     final code = await Navigator.of(context).push<String>(MaterialPageRoute(
-        builder: (_) => InstBarcodeScanPage(accept: (v) => matchScan(_items, scanCandidates(v)).isNotEmpty)));
+        builder: (_) => InstBarcodeScanPage(accept: (v) => planNoFromScan(v) != null || matchScan(_items, scanCandidates(v)).isNotEmpty)));
     if (code == null || !mounted) return;
     _search(code, source: Loc.t('Barcode scanned', 'بارکوڈ اسکین ہوا'));
   }
@@ -329,7 +339,9 @@ class _InstScanSaleScreenState extends State<InstScanSaleScreen> {
 /// "nahi mila" likh kar scan jari (dabbe ka doosra barcode aazmayein).
 class InstBarcodeScanPage extends StatefulWidget {
   final bool Function(String code) accept;
-  const InstBarcodeScanPage({super.key, required this.accept});
+  final String? hint;
+  final String? notFound;
+  const InstBarcodeScanPage({super.key, required this.accept, this.hint, this.notFound});
 
   @override
   State<InstBarcodeScanPage> createState() => _InstBarcodeScanPageState();
@@ -413,7 +425,7 @@ class _InstBarcodeScanPageState extends State<InstBarcodeScanPage> {
             decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(12)),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Text(
-                Loc.t('Hold the IMEI barcode inside the box', 'IMEI والا بارکوڈ خانے کے اندر رکھیں'),
+                widget.hint ?? Loc.t('Hold the IMEI barcode inside the box', 'IMEI والا بارکوڈ خانے کے اندر رکھیں'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
@@ -421,7 +433,7 @@ class _InstBarcodeScanPageState extends State<InstBarcodeScanPage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    '${Loc.t('Not in stock', 'اسٹاک میں نہیں')}: ${_tried.take(3).join(', ')}',
+                    '${widget.notFound ?? Loc.t('Not in stock', 'اسٹاک میں نہیں')}: ${_tried.take(3).join(', ')}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.orangeAccent, fontSize: 12.5),
                   ),

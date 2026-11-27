@@ -83,6 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _compatPrint = false;
   bool _testing = false;
   String? _logoPath; // Step 31: dukaan ka logo (PDF / receipt)
+  String? _payQrPath; // dukaan ka JazzCash / Easypaisa QR (receipt par "Scan to pay")
   LicenseStatus? _licStatus; // License card ke liye
   LicenseInfo? _licInfo;
   String _licDevice = '';
@@ -93,6 +94,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _load();
     ShopLogo.path().then((v) {
       if (mounted) setState(() => _logoPath = v);
+    });
+    ShopPayQr.path().then((v) {
+      if (mounted) setState(() => _payQrPath = v);
     });
     Permissions.refresh().then((_) {
       if (mounted) setState(() {});
@@ -725,6 +729,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
+            ),
+            // Online payment QR (JazzCash / Easypaisa / bank app ka "Receive money" QR screenshot).
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade400)),
+                  clipBehavior: Clip.antiAlias,
+                  child: _payQrPath == null
+                      ? const Icon(Icons.qr_code_2, size: 32)
+                      : Image.file(io.File(_payQrPath!), fit: BoxFit.contain),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Wrap(spacing: 8, runSpacing: 6, children: [
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final v = await ShopPayQr.pick();
+                          if (v != null && mounted) setState(() => _payQrPath = v);
+                        },
+                        icon: const Icon(Icons.qr_code_2),
+                        label: Text(_payQrPath == null
+                            ? Loc.t('Add payment QR', 'ادائیگی کا QR لگائیں')
+                            : Loc.t('Change payment QR', 'ادائیگی کا QR بدلیں')),
+                      ),
+                      if (_payQrPath != null)
+                        TextButton(
+                          onPressed: () async {
+                            await ShopPayQr.remove();
+                            if (mounted) setState(() => _payQrPath = null);
+                          },
+                          child: Text(Loc.t('Remove', 'ہٹائیں')),
+                        ),
+                    ]),
+                    Text(
+                        Loc.t('JazzCash / Easypaisa / bank QR screenshot. Printed on receipts as "Scan to pay". Confirm money, then press Receive.',
+                            'جاز کیش / ایزی پیسہ / بینک QR کا اسکرین شاٹ۔ رسید پر "اسکین کر کے ادائیگی" چھپے گا۔ پیسے ملنے کی تصدیق کر کے وصول دبائیں۔'),
+                        style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600)),
+                  ]),
+                ),
+              ]),
             ),
             FilledButton(onPressed: _saveShop, child: Text(Loc.t('SAVE SETTINGS', 'محفوظ کریں'))),
           ]),

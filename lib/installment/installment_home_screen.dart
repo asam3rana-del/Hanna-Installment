@@ -19,6 +19,7 @@ import 'inst_collection_screens.dart';
 import 'inst_customers_screen.dart';
 import 'inst_items_screen.dart';
 import 'inst_plan_repository.dart';
+import 'inst_plan_qr.dart';
 import 'inst_plans_screen.dart';
 import 'inst_purchase_repository.dart';
 import 'inst_purchase_screens.dart';
@@ -279,6 +280,18 @@ class _InstallmentHomeScreenState extends State<InstallmentHomeScreen> with Rout
             head(Loc.t('RECEIVE (MONEY IN)', 'لینا (رقم آئی)'), p.teal),
             item(Icons.request_quote_outlined, p.teal, Loc.t('Installment collection', 'قسط کی وصولی'),
                 Loc.t('Pick the customer, then Receive', 'کسٹمر چنیں، پھر وصول کریں'), const InstCollectionListScreen()),
+            ListTile(
+              leading: CircleAvatar(backgroundColor: p.teal.withOpacity(0.14), child: Icon(Icons.qr_code_scanner, color: p.teal)),
+              title: Text(Loc.t('Scan customer QR', 'کسٹمر کا QR اسکین کریں'), style: TextStyle(color: p.textDark, fontWeight: FontWeight.bold)),
+              subtitle: Text(Loc.t('Receipt / card QR → straight to Receive', 'رسید / کارڈ کا QR → سیدھا وصولی'),
+                  style: TextStyle(color: p.textMuted, fontSize: 12)),
+              trailing: Icon(Icons.chevron_right, color: p.textMuted),
+              onTap: () async {
+                Navigator.of(ctx).pop();
+                await scanPlanQrAndReceive(context);
+                if (mounted) await _load();
+              },
+            ),
             item(Icons.history_edu_outlined, p.purple, Loc.t('Old balance (before software)', 'پرانا بقایا (سافٹ ویئر سے پہلے)'),
                 Loc.t('Customers who still owe old balance', 'جن کا پرانا بقایا باقی ہے'), const InstOpeningDueScreen()),
             ListTile(

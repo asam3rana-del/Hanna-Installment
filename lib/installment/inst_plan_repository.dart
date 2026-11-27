@@ -405,6 +405,14 @@ class InstPlanRepository {
     return r.isEmpty ? null : (r.first['id'] as num).toInt();
   }
 
+  /// Plan number se id (customer QR scan). Chhote / bade harf barabar.
+  Future<int?> planIdForNo(String planNo) async {
+    final db = await AppDatabase.instance.database;
+    final r = await db.query('inst_plans',
+        columns: ['id'], where: 'UPPER(planNo) = ?', whereArgs: [planNo.trim().toUpperCase()], orderBy: 'createdAt DESC', limit: 1);
+    return r.isEmpty ? null : (r.first['id'] as num).toInt();
+  }
+
   // ================================================================ collect
 
   /// Qist wasool. [amount] qist mein jata hai, [fine] alag. Baqi se zyada => [ArgumentError].

@@ -12,6 +12,7 @@ import 'inst_exports.dart';
 import 'inst_models.dart';
 import 'inst_photo_widgets.dart';
 import 'inst_plan_math.dart';
+import 'inst_plan_qr.dart';
 import 'inst_plan_repository.dart';
 import 'inst_plans_screen.dart';
 import 'inst_purchase_repository.dart';
@@ -141,6 +142,14 @@ class _InstCollectionListScreenState extends State<InstCollectionListScreen> {
       backgroundColor: p.bg,
       body: Column(children: [
         instHeader(context, p, Loc.t('Collection List', 'وصولی لسٹ'), Loc.t('Who to collect from', 'کس سے کتنا لینا ہے'), actions: [
+          IconButton(
+            tooltip: Loc.t('Scan customer QR', 'کسٹمر کا QR اسکین کریں'),
+            icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+            onPressed: () async {
+              await scanPlanQrAndReceive(context);
+              if (mounted) await _reload();
+            },
+          ),
           IconButton(
             tooltip: Loc.t('Share list', 'لسٹ شیئر کریں'),
             icon: const Icon(Icons.share_outlined, color: Colors.white),
